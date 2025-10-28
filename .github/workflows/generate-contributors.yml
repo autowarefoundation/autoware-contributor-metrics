@@ -28,7 +28,7 @@ jobs:
       - name: Execute script
         run: |
           python scripts/get_contributors.py --token ${{ secrets.ACCESS_TOKEN }}
-          python scripts/get_stars.py --token ${{ secrets.ACCESS_TOKEN }}
+          python scripts/get_stargazers.py --token ${{ secrets.ACCESS_TOKEN }}
           python scripts/calculate_contributor_history.py
           python scripts/calculate_stargazers_history.py
           cp cache/contributor_history/contributors_history.json public/
