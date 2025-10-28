@@ -23,14 +23,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requirements.txt
+          pip install -r requirements.txt
 
       - name: Execute script
         run: |
-          python scripts/generate_contributors.py --github_token ${{ secrets.GITHUB_TOKEN }}
-          python scripts/get_stars.py --github_token ${{ secrets.GITHUB_TOKEN }}
-          python scripts/get_contributor_history.py
-          python scripts/reformat_stargazers.py
+          python scripts/get_contributors.py --token ${{ secrets.ACCESS_TOKEN }}
+          python scripts/get_stars.py --token ${{ secrets.ACCESS_TOKEN }}
+          python scripts/calculate_contributor_history.py
+          python scripts/calculate_stargazers_history.py
           cp cache/contributor_history/contributors_history.json public/
           cp cache/stargazer_history/stars_history.json public/
 
