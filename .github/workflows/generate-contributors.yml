@@ -1,0 +1,43 @@
+name: measure_contributors
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  measure-contributors:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requirements.txt
+
+      - name: Execute script
+        run: |
+          python scripts/generate_contributors.py --github_token ${{ secrets.GITHUB_TOKEN }}
+          python scripts/get_stars.py --github_token ${{ secrets.GITHUB_TOKEN }}
+          python scripts/get_contributor_history.py
+          python scripts/reformat_stargazers.py
+          cp cache/contributor_history/contributors_history.json public/
+          cp cache/stargazer_history/stars_history.json public/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public/
+
+      - name: Publish
+        uses: actions/deploy-pages@v4
