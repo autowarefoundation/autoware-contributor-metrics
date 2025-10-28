@@ -25,20 +25,75 @@ class GitHubGraphQLClient:
         payload = {"query": query}
         if variables:
             payload["variables"] = variables
-        try:
-            resp = requests.post(
-                self.base_url,
-                json=payload,
-                headers=self.headers,
-                timeout=60
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data
 
-        except requests.exceptions.RequestException as e:
-            print(f"Request failed: {e}")
-            sys.exit(1)
+        max_retries = 5
+        retry_delay = 1
+        for attempt in range(max_retries):
+            try:
+                resp = requests.post(
+                    self.base_url,
+                    json=payload,
+                    headers=self.headers,
+                    timeout=60
+                )
+
+                # Check rate limit headers
+                remaining = int(resp.headers.get('X-RateLimit-Remaining', 0))
+                reset_time = int(resp.headers.get('X-RateLimit-Reset', 0))
+
+                # If we're about to hit the rate limit, wait before continuing
+                if remaining < 10:
+                    wait_time = max(reset_time - int(time.time()), 0) + 1
+                    if wait_time > 0:
+                        print(f"Rate limit low ({remaining} remaining). Waiting {wait_time} seconds...")
+                        time.sleep(wait_time)
+
+                # Check for rate limit errors
+                if resp.status_code == 403:
+                    remaining = int(resp.headers.get('X-RateLimit-Remaining', 0))
+                    reset_time = int(resp.headers.get('X-RateLimit-Reset', 0))
+                    wait_time = max(reset_time - int(time.time()), 0) + 1
+
+                    if attempt < max_retries - 1:
+                        print(f"Rate limit exceeded. Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise Exception(f"Rate limit exceeded after {max_retries} retries")
+
+                resp.raise_for_status()
+                data = resp.json()
+
+                # Check for GraphQL errors
+                if 'errors' in data:
+                    error_messages = [err.get('message', 'Unknown error') for err in data['errors']]
+                    if 'rate limit' in str(error_messages).lower():
+                        if attempt < max_retries - 1:
+                            wait_time = retry_delay * (2 ** attempt)
+                            print(f"GraphQL rate limit error. Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}...")
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            raise Exception(f"Rate limit exceeded after {max_retries} retries: {error_messages}")
+                    else:
+                        raise Exception(f"GraphQL errors: {error_messages}")
+
+                # Add small delay between requests to avoid hitting rate limits
+                time.sleep(self.rate_limit_wait)
+
+                return data
+
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    print(f"Request failed: {e}. Retrying in {retry_delay * (2 ** attempt)} seconds...")
+                    time.sleep(retry_delay * (2 ** attempt))
+                    continue
+                else:
+                    print(f"Request failed after {max_retries} attempts: {e}")
+                    sys.exit(1)
+
+        # This should never be reached, but just in case
+        raise Exception("Unexpected error in execute_query")
 
     def get_first_cursor(self, contributor_type: str, repository: str) -> str:
         """Get the first cursor for a repository and contributor type"""
