@@ -2,6 +2,7 @@ import json
 import datetime
 from typing import Dict, List, Tuple
 from collections import defaultdict
+from pathlib import Path
 
 
 class StarsHistoryAnalyzer:
