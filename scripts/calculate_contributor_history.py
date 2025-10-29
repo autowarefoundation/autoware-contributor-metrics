@@ -130,15 +130,15 @@ def main():
 
     # Load community contributors (issues and discussions)
     community_contributors_files = [
-        "generated_json/autoware_discussions.json",
-        "generated_json/autoware_issues.json",
-        "generated_json/autoware_universe_issues.json",
-        "generated_json/autoware_core_issues.json",
-        "generated_json/autoware_common_issues.json",
-        "generated_json/autoware_msgs_issues.json",
-        "generated_json/autoware_launch_issues.json",
-        "generated_json/autoware-documentation_issues.json",
-        "generated_json/openadkit_issues.json"
+        "cache/raw_contributor_data/autoware_discussions.json",
+        "cache/raw_contributor_data/autoware_issues.json",
+        "cache/raw_contributor_data/autoware_universe_issues.json",
+        "cache/raw_contributor_data/autoware_core_issues.json",
+        "cache/raw_contributor_data/autoware_common_issues.json",
+        "cache/raw_contributor_data/autoware_msgs_issues.json",
+        "cache/raw_contributor_data/autoware_launch_issues.json",
+        "cache/raw_contributor_data/autoware-documentation_issues.json",
+        "cache/raw_contributor_data/openadkit_issues.json"
     ]
 
     print("Loading community contributors...")
@@ -147,14 +147,14 @@ def main():
 
     # Load code contributors (pull requests)
     code_contributors_files = [
-        "generated_json/autoware_prs.json",
-        "generated_json/autoware_universe_prs.json",
-        "generated_json/autoware_core_prs.json",
-        "generated_json/autoware_common_prs.json",
-        "generated_json/autoware_msgs_prs.json",
-        "generated_json/autoware_launch_prs.json",
-        "generated_json/autoware-documentation_prs.json",
-        "generated_json/openadkit_prs.json"
+        "cache/raw_contributor_data/autoware_prs.json",
+        "cache/raw_contributor_data/autoware_universe_prs.json",
+        "cache/raw_contributor_data/autoware_core_prs.json",
+        "cache/raw_contributor_data/autoware_common_prs.json",
+        "cache/raw_contributor_data/autoware_msgs_prs.json",
+        "cache/raw_contributor_data/autoware_launch_prs.json",
+        "cache/raw_contributor_data/autoware-documentation_prs.json",
+        "cache/raw_contributor_data/openadkit_prs.json"
     ]
 
     print("Loading code contributors...")
@@ -170,7 +170,7 @@ def main():
     output_data = history.to_json()
 
     # Write to file
-    output_path = Path("cache/contributor_history")
+    output_path = Path("results")
     output_path.mkdir(exist_ok=True, parents=True)
 
     output_file = output_path / "contributors_history.json"

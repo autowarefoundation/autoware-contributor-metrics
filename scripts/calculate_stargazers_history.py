@@ -164,7 +164,8 @@ def main():
     output_data = {}
 
     for repository in repositories:
-        file_path = f"stars/{repository}_stargazers.json"
+        raw_data_path = Path("cache/raw_stargazer_data")
+        file_path = raw_data_path / f"{repository}_stargazers.json"
 
         print(f"Processing {repository}...")
         stargazers_data = analyzer.load_stargazers_from_file(str(file_path))
@@ -195,7 +196,7 @@ def main():
     ))
 
     # Write to file
-    output_path = Path("cache/stargazer_history")
+    output_path = Path("results")
     output_path.mkdir(exist_ok=True, parents=True)
 
     output_file = output_path / "stars_history.json"
