@@ -416,6 +416,40 @@ fetch('stars_history.json')
       starsOptions,
     );
     starsChart.render();
+
+    // Display latest numbers above the chart
+    const latestTotalStarsEntry = json.total_stars_history.length > 0
+      ? json.total_stars_history[json.total_stars_history.length - 1]
+      : null;
+    const latestTotalStars = latestTotalStarsEntry ? latestTotalStarsEntry.star_count : 0;
+    const latestDate = latestTotalStarsEntry
+      ? new Date(latestTotalStarsEntry.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      : 'N/A';
+    const statsHtml = `
+      <div style="margin-bottom: 10px;">
+        <span style="font-size: 14px; color: #666;">Last updated: <strong>${latestDate}</strong></span>
+      </div>
+      <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+        <div>
+          <strong style="font-size: 14px; color: #666;">Total Stars:</strong>
+          <span style="font-size: 24px; font-weight: bold; color: #00D9FF; margin-left: 10px;">${latestTotalStars.toLocaleString()}</span>
+        </div>
+        ${keyRepos.map((repoKey) => {
+          if (json[repoKey] && json[repoKey].length > 0) {
+            const repoName = repoKey.replace('_stars_history', '');
+            const latestCount = json[repoKey][json[repoKey].length - 1].star_count;
+            return `
+              <div>
+                <strong style="font-size: 14px; color: #666;">${repoName}:</strong>
+                <span style="font-size: 24px; font-weight: bold; color: #333; margin-left: 10px;">${latestCount.toLocaleString()}</span>
+              </div>
+            `;
+          }
+          return '';
+        }).join('')}
+      </div>
+    `;
+    document.querySelector('#stars-stats').innerHTML = statsHtml;
   })
   .catch((error) => {
     console.log('Error loading stars/stars_history.json:', error);
@@ -504,6 +538,41 @@ fetch('contributors_history.json')
       contributorsOptions,
     );
     contributorsChart.render();
+
+    // Display latest numbers above the chart
+    const latestAllContributorsEntry = json.autoware_contributors.length > 0
+      ? json.autoware_contributors[json.autoware_contributors.length - 1]
+      : null;
+    const latestAllContributors = latestAllContributorsEntry ? latestAllContributorsEntry.contributors_count : 0;
+    const latestCodeContributors = json.autoware_code_contributors.length > 0
+      ? json.autoware_code_contributors[json.autoware_code_contributors.length - 1].contributors_count
+      : 0;
+    const latestCommunityContributors = json.autoware_community_contributors.length > 0
+      ? json.autoware_community_contributors[json.autoware_community_contributors.length - 1].contributors_count
+      : 0;
+    const latestDate = latestAllContributorsEntry
+      ? new Date(latestAllContributorsEntry.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      : 'N/A';
+    const statsHtml = `
+      <div style="margin-bottom: 10px;">
+        <span style="font-size: 14px; color: #666;">Last updated: <strong>${latestDate}</strong></span>
+      </div>
+      <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+        <div>
+          <strong style="font-size: 14px; color: #666;">All Contributors:</strong>
+          <span style="font-size: 24px; font-weight: bold; color: #00D9FF; margin-left: 10px;">${latestAllContributors.toLocaleString()}</span>
+        </div>
+        <div>
+          <strong style="font-size: 14px; color: #666;">Code Contributors:</strong>
+          <span style="font-size: 24px; font-weight: bold; color: #FF6B6B; margin-left: 10px;">${latestCodeContributors.toLocaleString()}</span>
+        </div>
+        <div>
+          <strong style="font-size: 14px; color: #666;">Community Contributors:</strong>
+          <span style="font-size: 24px; font-weight: bold; color: #4ECDC4; margin-left: 10px;">${latestCommunityContributors.toLocaleString()}</span>
+        </div>
+      </div>
+    `;
+    document.querySelector('#contributors-stats').innerHTML = statsHtml;
   })
   .catch((error) => {
     console.log('Error loading contributor_history/contributors_history.json:', error);
