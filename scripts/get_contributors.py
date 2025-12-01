@@ -116,17 +116,29 @@ class GitHubGraphQLClient:
             return None
         return edges[0]["cursor"]
 
-    def get_contributors(self, contributor_type: str, repository: str) -> List[Dict]:
-        """Retrieve all contributors of a specific type from a repository"""
-        print(f"Retrieving {contributor_type} for {repository}...")
+    def get_contributors(self, contributor_type: str, repository: str, start_cursor: str = None) -> List[Dict]:
+        """Retrieve all contributors of a specific type from a repository
 
-        first_cursor = self.get_first_cursor(contributor_type, repository)
-        if first_cursor is None:
-            print(f"No {contributor_type} found for {repository}")
-            return []
+        Args:
+            contributor_type: Type of contributor data to fetch (issues, pullRequests, discussions)
+            repository: Repository name
+            start_cursor: Optional cursor to start fetching from (for incremental updates)
+        """
+        if start_cursor:
+            print(f"Retrieving new {contributor_type} for {repository} (incremental update)...")
+        else:
+            print(f"Retrieving {contributor_type} for {repository}...")
+
+        # Use provided cursor or get the first one
+        if start_cursor:
+            cursor = start_cursor
+        else:
+            cursor = self.get_first_cursor(contributor_type, repository)
+            if cursor is None:
+                print(f"No {contributor_type} found for {repository}")
+                return []
 
         all_edges = []
-        cursor = first_cursor
         page_count = 0
 
         query = f"""
@@ -186,6 +198,28 @@ def dump_json(data: Dict, filename: str, output_dir: str = "cache/raw_contributo
         json.dump(data, f, indent=2)
     print(f"Saved {filename} to {file_path}")
 
+def cache_exists(filename: str, output_dir: str = "cache/raw_contributor_data") -> bool:
+    """Check if a cache file already exists"""
+    file_path = Path(output_dir) / filename
+    return file_path.exists()
+
+
+def load_cache(filename: str, output_dir: str = "cache/raw_contributor_data") -> List[Dict]:
+    """Load cached data from a file"""
+    file_path = Path(output_dir) / filename
+    if not file_path.exists():
+        return []
+    with open(file_path, 'r') as f:
+        return json.load(f)
+
+
+def get_last_cursor(cached_data: List[Dict]) -> str:
+    """Get the last cursor from cached data"""
+    if not cached_data:
+        return None
+    return cached_data[-1].get("cursor")
+
+
 def main():
     """Main function to generate JSON files for all repositories"""
     # Parse command-line arguments
@@ -196,6 +230,11 @@ def main():
         "--token",
         type=str,
         help="GitHub token for API authentication (default: read from GITHUB_TOKEN env var)"
+    )
+    parser.add_argument(
+        "--use-cache",
+        action="store_true",
+        help="Use cached data and only fetch new data incrementally"
     )
     args = parser.parse_args()
 
@@ -237,10 +276,31 @@ def main():
 
     # Special case for autoware discussions
     try:
-        print("Processing autoware discussions...")
-        discussions = client.get_contributors("discussions", "autoware")
-        if discussions:
-            dump_json(discussions, "autoware_discussions.json")
+        discussions_file = "autoware_discussions.json"
+        if args.use_cache and cache_exists(discussions_file):
+            # Load cache and fetch new data incrementally
+            cached_data = load_cache(discussions_file)
+            last_cursor = get_last_cursor(cached_data)
+            if last_cursor:
+                print(f"Fetching new autoware discussions (from cached cursor)...")
+                new_data = client.get_contributors("discussions", "autoware", start_cursor=last_cursor)
+                if new_data:
+                    # Merge cached and new data
+                    merged_data = cached_data + new_data
+                    dump_json(merged_data, discussions_file)
+                    print(f"Added {len(new_data)} new discussions to cache")
+                else:
+                    print(f"No new discussions found")
+            else:
+                print(f"Cache exists but no cursor found, re-fetching all data...")
+                discussions = client.get_contributors("discussions", "autoware")
+                if discussions:
+                    dump_json(discussions, discussions_file)
+        else:
+            print("Processing autoware discussions...")
+            discussions = client.get_contributors("discussions", "autoware")
+            if discussions:
+                dump_json(discussions, discussions_file)
     except Exception as e:
         print(f"Error processing autoware discussions: {e}")
 
@@ -252,14 +312,50 @@ def main():
 
         try:
             # Get issues
-            issues = client.get_contributors("issues", repository)
-            if issues:
-                dump_json(issues, f"{repository}_issues.json")
+            issues_file = f"{repository}_issues.json"
+            if args.use_cache and cache_exists(issues_file):
+                # Load cache and fetch new data incrementally
+                cached_issues = load_cache(issues_file)
+                last_cursor = get_last_cursor(cached_issues)
+                if last_cursor:
+                    new_issues = client.get_contributors("issues", repository, start_cursor=last_cursor)
+                    if new_issues:
+                        merged_issues = cached_issues + new_issues
+                        dump_json(merged_issues, issues_file)
+                        print(f"Added {len(new_issues)} new issues to cache")
+                    else:
+                        print(f"No new issues found for {repository}")
+                else:
+                    issues = client.get_contributors("issues", repository)
+                    if issues:
+                        dump_json(issues, issues_file)
+            else:
+                issues = client.get_contributors("issues", repository)
+                if issues:
+                    dump_json(issues, issues_file)
 
             # Get pull requests
-            pull_requests = client.get_contributors("pullRequests", repository)
-            if pull_requests:
-                dump_json(pull_requests, f"{repository}_prs.json")
+            prs_file = f"{repository}_prs.json"
+            if args.use_cache and cache_exists(prs_file):
+                # Load cache and fetch new data incrementally
+                cached_prs = load_cache(prs_file)
+                last_cursor = get_last_cursor(cached_prs)
+                if last_cursor:
+                    new_prs = client.get_contributors("pullRequests", repository, start_cursor=last_cursor)
+                    if new_prs:
+                        merged_prs = cached_prs + new_prs
+                        dump_json(merged_prs, prs_file)
+                        print(f"Added {len(new_prs)} new pull requests to cache")
+                    else:
+                        print(f"No new pull requests found for {repository}")
+                else:
+                    pull_requests = client.get_contributors("pullRequests", repository)
+                    if pull_requests:
+                        dump_json(pull_requests, prs_file)
+            else:
+                pull_requests = client.get_contributors("pullRequests", repository)
+                if pull_requests:
+                    dump_json(pull_requests, prs_file)
 
         except Exception as e:
             print(f"Error processing {repository}: {e}")
