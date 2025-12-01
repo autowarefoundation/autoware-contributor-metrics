@@ -29,14 +29,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Restore cache
+        uses: actions/cache/restore@v4
+        with:
+          path: cache/
+          key: contributor-data-cache-${{ github.run_id }}
+          restore-keys: |
+            contributor-data-cache-
+
       - name: Execute script
         run: |
-          python scripts/get_contributors.py --token ${{ secrets.ACCESS_TOKEN }}
-          python scripts/get_stargazers.py --token ${{ secrets.ACCESS_TOKEN }}
+          python scripts/get_contributors.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
+          python scripts/get_stargazers.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
           python scripts/calculate_contributor_history.py
           python scripts/calculate_stargazers_history.py
           cp results/contributors_history.json public/
           cp results/stars_history.json public/
+
+      - name: Save cache
+        uses: actions/cache/save@v4
+        with:
+          path: cache/
+          key: contributor-data-cache-${{ github.run_id }}
 
       - name: Upload cache and results
         uses: actions/upload-artifact@v4
