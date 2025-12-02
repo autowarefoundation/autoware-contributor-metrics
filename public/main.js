@@ -99,7 +99,7 @@ fetch('stars_history.json')
       </div>
       <div style="display: flex; gap: 30px; flex-wrap: wrap;">
         <div>
-          <strong style="font-size: 14px; color: #666;">Total Stars:</strong>
+          <strong style="font-size: 14px; color: #666;">Total Unique Stars:</strong>
           <span style="font-size: 24px; font-weight: bold; color: ${chartColors[0]}; margin-left: 10px;">${latestTotalStars.toLocaleString()}</span>
         </div>
         ${keyRepos.map((repoKey, index) => {
@@ -229,7 +229,7 @@ fetch('contributors_history.json')
       </div>
       <div style="display: flex; gap: 30px; flex-wrap: wrap;">
         <div>
-          <strong style="font-size: 14px; color: #666;">All Contributors:</strong>
+          <strong style="font-size: 14px; color: #666;">Total Unique Contributors:</strong>
           <span style="font-size: 24px; font-weight: bold; color: ${chartColors[0]}; margin-left: 10px;">${latestAllContributors.toLocaleString()}</span>
         </div>
         <div>
