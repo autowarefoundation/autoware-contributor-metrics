@@ -3,6 +3,7 @@ import datetime
 from typing import Dict, List, Tuple
 from collections import defaultdict
 from pathlib import Path
+from repositories import REPOSITORIES
 
 
 class StarsHistoryAnalyzer:
@@ -129,34 +130,7 @@ def main():
 
     analyzer = StarsHistoryAnalyzer()
 
-    # List of repositories to process
-    repositories = [
-        "autoware",
-        "autoware_core",
-        "autoware_common",
-        "autoware_universe",
-        "autoware.privately-owned-vehicles",
-        "autoware_msgs",
-        "autoware_launch",
-        "autoware-documentation",
-        "autoware_tools",
-        "autoware_cmake",
-        "autoware_utils",
-        "autoware_lanelet2_extension",
-        "autoware_rviz_plugins",
-        "autoware_adapi_msgs",
-        "autoware_internal_msgs",
-        "openadkit",
-        "autoware_ai",
-        "autoware_ai_perception",
-        "autoware_ai_planning",
-        "autoware_ai_messages",
-        "autoware_ai_simulation",
-        "autoware_ai_visualization",
-        "autoware_ai_drivers",
-        "autoware_ai_utilities",
-        "autoware_ai_common"
-    ]
+    repositories = REPOSITORIES
 
     # Process each repository
     all_histories = []

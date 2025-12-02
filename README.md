@@ -29,12 +29,14 @@ Tracks the cumulative number of unique contributors over time.
 
 **Example:** If user B created a PR on Mar 1 and commented on an Issue on Feb 1, they appear in Total Contributors on Feb 1.
 
-**Target Repositories:**
-- autoware, autoware_core, autoware_universe, autoware_common
-- autoware_msgs, autoware_adapi_msgs, autoware_internal_msgs
-- autoware_cmake, autoware_utils, autoware_lanelet2_extension
-- autoware_launch, autoware-documentation, autoware_tools
-- And 10+ more Autoware Foundation repositories
+**Target Repositories (Top 25 by composite score: stars + forks + recency):**
+- autoware, autoware_universe, autoware_core, autoware.privately-owned-vehicles
+- ros2_socketcan, autoware-documentation, autoware_launch, autoware_msgs
+- AWSIM-Labs, autoware_tools, autoware_common, autoware-github-actions
+- sample_sensor_kit_launch, sample_vehicle_launch, autoware_adapi_msgs
+- autoware_internal_msgs, autoware_cmake, autoware_utils
+- autoware_lanelet2_extension, autoware_rviz_plugins, openadkit, autoware.off-road
+- autoware_ai, autoware_ai_perception, autoware_ai_planning
 
 ### Contributor Rankings
 Monthly and yearly rankings for four categories:

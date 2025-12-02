@@ -6,6 +6,7 @@ import time
 import argparse
 from typing import List, Dict, Any
 from pathlib import Path
+from repositories import REPOSITORIES
 
 class GitHubGraphQLClient:
     """Client for interacting with GitHub GraphQL API"""
@@ -254,34 +255,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # List of Autoware repositories to process
-    repositories = [
-        "autoware",
-        "autoware_core",
-        "autoware_universe",
-        "autoware_common",
-        "autoware_msgs",
-        "autoware_adapi_msgs",
-        "autoware_internal_msgs",
-        "autoware_cmake",
-        "autoware_utils",
-        "autoware_lanelet2_extension",
-        "autoware_rviz_plugins",
-        "autoware_launch",
-        "autoware-documentation",
-        "autoware_tools",
-        "autoware.privately-owned-vehicles",
-        "openadkit",
-        "autoware_ai",
-        "autoware_ai_perception",
-        "autoware_ai_planning",
-        "autoware_ai_messages",
-        "autoware_ai_simulation",
-        "autoware_ai_visualization",
-        "autoware_ai_drivers",
-        "autoware_ai_utilities",
-        "autoware_ai_common"
-    ]
+    repositories = REPOSITORIES
 
     # Initialize the GitHub GraphQL client
     try:

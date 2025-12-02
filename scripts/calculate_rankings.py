@@ -3,6 +3,7 @@ import datetime
 from typing import Dict, List
 from pathlib import Path
 from collections import defaultdict
+from repositories import REPOSITORIES
 
 # Bot users to exclude from rankings
 BOT_USERS = {
@@ -328,34 +329,7 @@ def main():
 
     calculator = RankingCalculator()
 
-    # Repository list
-    repositories = [
-        "autoware",
-        "autoware_core",
-        "autoware_universe",
-        "autoware_common",
-        "autoware_msgs",
-        "autoware_adapi_msgs",
-        "autoware_internal_msgs",
-        "autoware_cmake",
-        "autoware_utils",
-        "autoware_lanelet2_extension",
-        "autoware_rviz_plugins",
-        "autoware_launch",
-        "autoware-documentation",
-        "autoware_tools",
-        "autoware.privately-owned-vehicles",
-        "openadkit",
-        "autoware_ai",
-        "autoware_ai_perception",
-        "autoware_ai_planning",
-        "autoware_ai_messages",
-        "autoware_ai_simulation",
-        "autoware_ai_visualization",
-        "autoware_ai_drivers",
-        "autoware_ai_utilities",
-        "autoware_ai_common",
-    ]
+    repositories = REPOSITORIES
 
     cache_dir = Path("cache/raw_contributor_data")
 
