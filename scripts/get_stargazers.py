@@ -123,17 +123,28 @@ class GitHubStargazersClient:
             return None
         return edges[0]["cursor"]
 
-    def get_stargazers(self, repository: str) -> List[Dict]:
-        """Retrieve all stargazers from a repository"""
-        print(f"Retrieving stargazers for {repository}...")
+    def get_stargazers(self, repository: str, start_cursor: str = None) -> List[Dict]:
+        """Retrieve all stargazers from a repository
 
-        first_cursor = self.get_first_cursor(repository)
-        if first_cursor is None:
-            print(f"No stargazers found for {repository}")
-            return []
+        Args:
+            repository: Repository name
+            start_cursor: Optional cursor to start fetching from (for incremental updates)
+        """
+        if start_cursor:
+            print(f"Retrieving new stargazers for {repository} (incremental update)...")
+        else:
+            print(f"Retrieving stargazers for {repository}...")
+
+        # Use provided cursor or get the first one
+        if start_cursor:
+            cursor = start_cursor
+        else:
+            cursor = self.get_first_cursor(repository)
+            if cursor is None:
+                print(f"No stargazers found for {repository}")
+                return []
 
         all_edges = []
-        cursor = first_cursor
         page_count = 0
 
         query = """
@@ -204,6 +215,29 @@ def dump_usernames(usernames: Set[str], filename: str, output_dir: str = "cache/
 
     print(f"Saved {filename} to {file_path}")
 
+
+def cache_exists(filename: str, output_dir: str = "cache/raw_stargazer_data") -> bool:
+    """Check if a cache file already exists"""
+    file_path = Path(output_dir) / filename
+    return file_path.exists()
+
+
+def load_cached_stargazers(filename: str, output_dir: str = "cache/raw_stargazer_data") -> List[Dict]:
+    """Load stargazers data from cache file"""
+    file_path = Path(output_dir) / filename
+    if not file_path.exists():
+        return []
+    with open(file_path, 'r') as f:
+        return json.load(f)
+
+
+def get_last_cursor(cached_data: List[Dict]) -> str:
+    """Get the last cursor from cached data"""
+    if not cached_data:
+        return None
+    return cached_data[-1].get("cursor")
+
+
 def main():
     """Main function to retrieve stargazers from all repositories"""
     # Parse command-line arguments
@@ -214,6 +248,11 @@ def main():
         "--token",
         type=str,
         help="GitHub token for API authentication (default: read from GITHUB_TOKEN env var)"
+    )
+    parser.add_argument(
+        "--use-cache",
+        action="store_true",
+        help="Use cached data and only fetch new data incrementally"
     )
     args = parser.parse_args()
 
@@ -258,11 +297,37 @@ def main():
 
     for repository in repositories:
         try:
-            stargazers = client.get_stargazers(repository)
-            usernames = get_usernames(stargazers)
-            all_usernames.update(usernames)
-            dump_json(stargazers, repository + "_stargazers.json")
-            dump_usernames(usernames, repository + "_usernames.txt")
+            cache_file = repository + "_stargazers.json"
+            if args.use_cache and cache_exists(cache_file):
+                # Load cache and fetch new data incrementally
+                cached_stargazers = load_cached_stargazers(cache_file)
+                last_cursor = get_last_cursor(cached_stargazers)
+                if last_cursor:
+                    new_stargazers = client.get_stargazers(repository, start_cursor=last_cursor)
+                    if new_stargazers:
+                        # Merge cached and new data
+                        merged_stargazers = cached_stargazers + new_stargazers
+                        dump_json(merged_stargazers, cache_file)
+                        print(f"Added {len(new_stargazers)} new stargazers to cache")
+                        usernames = get_usernames(merged_stargazers)
+                        dump_usernames(usernames, repository + "_usernames.txt")
+                    else:
+                        print(f"No new stargazers found for {repository}")
+                        usernames = get_usernames(cached_stargazers)
+                    all_usernames.update(usernames)
+                else:
+                    # Cache exists but no cursor, re-fetch all
+                    stargazers = client.get_stargazers(repository)
+                    usernames = get_usernames(stargazers)
+                    all_usernames.update(usernames)
+                    dump_json(stargazers, cache_file)
+                    dump_usernames(usernames, repository + "_usernames.txt")
+            else:
+                stargazers = client.get_stargazers(repository)
+                usernames = get_usernames(stargazers)
+                all_usernames.update(usernames)
+                dump_json(stargazers, cache_file)
+                dump_usernames(usernames, repository + "_usernames.txt")
         except Exception as e:
             print(f"Error processing {repository}: {e}")
             continue
