@@ -1,251 +1,243 @@
-// Load and visualize stars history
-fetch('stars_history.json')
-  .then((res) => res.json())
-  .then((json) => {
-    const series = [];
+// =============================================================================
+// Constants
+// =============================================================================
 
-    // Add total stars history
-    series.push({
-      name: 'Total Unique Stars',
-      data: json.total_stars_history.map((item) => [
-        new Date(item.date),
-        item.star_count,
-      ]),
-    });
+const COLORS = {
+  stars: ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181'],
+  contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
+};
 
-    // Add a few key repositories
-    const keyRepos = [
-      'autoware_stars_history',
-      'autoware_core_stars_history',
-      'autoware_universe_stars_history',
-      'autoware.privately-owned-vehicles_stars_history',
-    ];
+const STARS_KEY_REPOS = [
+  'autoware_stars_history',
+  'autoware_core_stars_history',
+  'autoware_universe_stars_history',
+  'autoware.privately-owned-vehicles_stars_history',
+];
 
-    keyRepos.forEach((repoKey) => {
-      if (json[repoKey]) {
-        const repoName = repoKey.replace('_stars_history', '');
-        series.push({
-          name: repoName,
-          data: json[repoKey].map((item) => [
-            new Date(item.date),
-            item.star_count,
-          ]),
-        });
-      }
-    });
+// =============================================================================
+// Utility Functions
+// =============================================================================
 
-    const starsOptions = {
-      series: series,
-      chart: {
-        height: 500,
-        type: 'line',
-        zoom: {
-          enabled: true,
-        },
-        selection: {
-          enabled: true,
-        },
-      },
-      dataLabels: {
-        enabled: false,
-      },
-      title: {
-        text: 'GitHub Stars Over Time',
-        align: 'left',
-      },
-      grid: {
-        row: {
-          colors: ['#f3f3f3', 'transparent'],
-          opacity: 0.5,
-        },
-      },
-      xaxis: {
-        type: 'datetime',
-      },
-      yaxis: {
-        min: 0,
-        title: {
-          text: 'Number of Stars',
-        },
-      },
-      tooltip: {
-        y: {
-          formatter: function (val) {
-            return `${Math.round(val).toLocaleString()}`;
-          },
-        },
-      },
-      colors: ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181'],
-    };
+function getLastEntry(array) {
+  return array.length > 0 ? array[array.length - 1] : null;
+}
 
-    const starsChart = new ApexCharts(
-      document.querySelector('#stars-chart'),
-      starsOptions,
-    );
-    starsChart.render();
-
-    // Display latest numbers above the chart
-    const latestTotalStarsEntry = json.total_stars_history.length > 0
-      ? json.total_stars_history[json.total_stars_history.length - 1]
-      : null;
-    const latestTotalStars = latestTotalStarsEntry ? latestTotalStarsEntry.star_count : 0;
-    const latestDate = latestTotalStarsEntry
-      ? new Date(latestTotalStarsEntry.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-      : 'N/A';
-    const chartColors = ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181'];
-    const statsHtml = `
-      <div style="margin-bottom: 10px;">
-        <span style="font-size: 14px; color: #666;">Last updated: <strong>${latestDate}</strong></span>
-      </div>
-      <div style="display: flex; gap: 30px; flex-wrap: wrap;">
-        <div>
-          <strong style="font-size: 14px; color: #666;">Total Unique Stars:</strong>
-          <span style="font-size: 24px; font-weight: bold; color: ${chartColors[0]}; margin-left: 10px;">${latestTotalStars.toLocaleString()}</span>
-        </div>
-        ${keyRepos.map((repoKey, index) => {
-          if (json[repoKey] && json[repoKey].length > 0) {
-            const repoName = repoKey.replace('_stars_history', '');
-            const latestCount = json[repoKey][json[repoKey].length - 1].star_count;
-            const color = chartColors[index + 1] || '#333';
-            return `
-              <div>
-                <strong style="font-size: 14px; color: #666;">${repoName}:</strong>
-                <span style="font-size: 24px; font-weight: bold; color: ${color}; margin-left: 10px;">${latestCount.toLocaleString()}</span>
-              </div>
-            `;
-          }
-          return '';
-        }).join('')}
-      </div>
-    `;
-    document.querySelector('#stars-stats').innerHTML = statsHtml;
-  })
-  .catch((error) => {
-    console.log('Error loading stars/stars_history.json:', error);
-    document.querySelector('#stars-chart').innerHTML =
-      '<p style="color: #666;">Stars history data not available</p>';
+function formatDate(dateString) {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   });
+}
 
-// Load and visualize contributor history
-fetch('contributors_history.json')
-  .then((res) => res.json())
-  .then((json) => {
-    const series = [
-      {
-        name: 'Total Unique Contributors',
-        data: json.autoware_contributors.map((item) => [
-          new Date(item.date),
-          item.contributors_count,
-        ]),
-      },
-      {
-        name: 'Code Contributors',
-        data: json.autoware_code_contributors.map((item) => [
-          new Date(item.date),
-          item.contributors_count,
-        ]),
-      },
-      {
-        name: 'Community Contributors',
-        data: json.autoware_community_contributors.map((item) => [
-          new Date(item.date),
-          item.contributors_count,
-        ]),
-      },
-    ];
+function formatNumber(val) {
+  return Math.round(val).toLocaleString();
+}
 
-    const contributorsOptions = {
-      series: series,
-      chart: {
-        height: 500,
-        type: 'line',
-        zoom: {
-          enabled: true,
-        },
-        selection: {
-          enabled: true,
-        },
+function mapToChartData(dataArray, valueKey) {
+  return dataArray.map((item) => [new Date(item.date), item[valueKey]]);
+}
+
+// =============================================================================
+// Chart Configuration
+// =============================================================================
+
+function createChartOptions({ series, title, yAxisTitle, colors, showLegend = false }) {
+  return {
+    series,
+    chart: {
+      height: 500,
+      type: 'line',
+      zoom: { enabled: true },
+      selection: { enabled: true },
+    },
+    dataLabels: { enabled: false },
+    title: { text: title, align: 'left' },
+    grid: {
+      row: {
+        colors: ['#f3f3f3', 'transparent'],
+        opacity: 0.5,
       },
-      dataLabels: {
-        enabled: false,
-      },
-      title: {
-        text: 'Contributor Growth Over Time',
-        align: 'left',
-      },
-      grid: {
-        row: {
-          colors: ['#f3f3f3', 'transparent'],
-          opacity: 0.5,
-        },
-      },
-      xaxis: {
-        type: 'datetime',
-      },
-      yaxis: {
-        min: 0,
-        title: {
-          text: 'Number of Contributors',
-        },
-      },
-      tooltip: {
-        y: {
-          formatter: function (val) {
-            return `${Math.round(val).toLocaleString()}`;
-          },
-        },
-      },
-      colors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
+    },
+    xaxis: { type: 'datetime' },
+    yaxis: {
+      min: 0,
+      title: { text: yAxisTitle },
+    },
+    tooltip: {
+      y: { formatter: formatNumber },
+    },
+    colors,
+    ...(showLegend && {
       legend: {
         position: 'top',
         horizontalAlign: 'right',
       },
-    };
+    }),
+  };
+}
 
-    const contributorsChart = new ApexCharts(
-      document.querySelector('#contributors-chart'),
-      contributorsOptions,
-    );
-    contributorsChart.render();
+// =============================================================================
+// Stats Display
+// =============================================================================
 
-    // Display latest numbers above the chart
-    const latestAllContributorsEntry = json.autoware_contributors.length > 0
-      ? json.autoware_contributors[json.autoware_contributors.length - 1]
-      : null;
-    const latestAllContributors = latestAllContributorsEntry ? latestAllContributorsEntry.contributors_count : 0;
-    const latestCodeContributors = json.autoware_code_contributors.length > 0
-      ? json.autoware_code_contributors[json.autoware_code_contributors.length - 1].contributors_count
-      : 0;
-    const latestCommunityContributors = json.autoware_community_contributors.length > 0
-      ? json.autoware_community_contributors[json.autoware_community_contributors.length - 1].contributors_count
-      : 0;
-    const latestDate = latestAllContributorsEntry
-      ? new Date(latestAllContributorsEntry.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-      : 'N/A';
-    const chartColors = ['#00D9FF', '#FF6B6B', '#4ECDC4'];
-    const statsHtml = `
-      <div style="margin-bottom: 10px;">
-        <span style="font-size: 14px; color: #666;">Last updated: <strong>${latestDate}</strong></span>
-      </div>
-      <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+function createStatsHtml(date, items, colors) {
+  const itemsHtml = items
+    .map(
+      ({ label, value }, index) => `
         <div>
-          <strong style="font-size: 14px; color: #666;">Total Unique Contributors:</strong>
-          <span style="font-size: 24px; font-weight: bold; color: ${chartColors[0]}; margin-left: 10px;">${latestAllContributors.toLocaleString()}</span>
+          <strong style="font-size: 14px; color: #666;">${label}:</strong>
+          <span style="font-size: 24px; font-weight: bold; color: ${colors[index]}; margin-left: 10px;">
+            ${formatNumber(value)}
+          </span>
         </div>
-        <div>
-          <strong style="font-size: 14px; color: #666;">Code Contributors:</strong>
-          <span style="font-size: 24px; font-weight: bold; color: ${chartColors[1]}; margin-left: 10px;">${latestCodeContributors.toLocaleString()}</span>
-        </div>
-        <div>
-          <strong style="font-size: 14px; color: #666;">Community Contributors:</strong>
-          <span style="font-size: 24px; font-weight: bold; color: ${chartColors[2]}; margin-left: 10px;">${latestCommunityContributors.toLocaleString()}</span>
-        </div>
-      </div>
-    `;
-    document.querySelector('#contributors-stats').innerHTML = statsHtml;
+      `,
+    )
+    .join('');
+
+  return `
+    <div style="margin-bottom: 10px;">
+      <span style="font-size: 14px; color: #666;">Last updated: <strong>${date}</strong></span>
+    </div>
+    <div style="display: flex; gap: 30px; flex-wrap: wrap;">
+      ${itemsHtml}
+    </div>
+  `;
+}
+
+function showError(selector, message) {
+  document.querySelector(selector).innerHTML = `<p style="color: #666;">${message}</p>`;
+}
+
+// =============================================================================
+// Stars Chart
+// =============================================================================
+
+function renderStarsChart(json) {
+  const series = [
+    {
+      name: 'Total Unique Stars',
+      data: mapToChartData(json.total_stars_history, 'star_count'),
+    },
+  ];
+
+  STARS_KEY_REPOS.forEach((repoKey) => {
+    if (json[repoKey]) {
+      series.push({
+        name: repoKey.replace('_stars_history', ''),
+        data: mapToChartData(json[repoKey], 'star_count'),
+      });
+    }
+  });
+
+  const options = createChartOptions({
+    series,
+    title: 'GitHub Stars Over Time',
+    yAxisTitle: 'Number of Stars',
+    colors: COLORS.stars,
+  });
+
+  new ApexCharts(document.querySelector('#stars-chart'), options).render();
+}
+
+function renderStarsStats(json) {
+  const latestEntry = getLastEntry(json.total_stars_history);
+  const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
+
+  const items = [{ label: 'Total Unique Stars', value: latestEntry?.star_count || 0 }];
+
+  STARS_KEY_REPOS.forEach((repoKey) => {
+    const entry = getLastEntry(json[repoKey] || []);
+    if (entry) {
+      items.push({
+        label: repoKey.replace('_stars_history', ''),
+        value: entry.star_count,
+      });
+    }
+  });
+
+  document.querySelector('#stars-stats').innerHTML = createStatsHtml(date, items, COLORS.stars);
+}
+
+// =============================================================================
+// Contributors Chart
+// =============================================================================
+
+function renderContributorsChart(json) {
+  const series = [
+    {
+      name: 'Total Unique Contributors',
+      data: mapToChartData(json.autoware_contributors, 'contributors_count'),
+    },
+    {
+      name: 'Code Contributors',
+      data: mapToChartData(json.autoware_code_contributors, 'contributors_count'),
+    },
+    {
+      name: 'Community Contributors',
+      data: mapToChartData(json.autoware_community_contributors, 'contributors_count'),
+    },
+  ];
+
+  const options = createChartOptions({
+    series,
+    title: 'Contributor Growth Over Time',
+    yAxisTitle: 'Number of Contributors',
+    colors: COLORS.contributors,
+    showLegend: true,
+  });
+
+  new ApexCharts(document.querySelector('#contributors-chart'), options).render();
+}
+
+function renderContributorsStats(json) {
+  const latestEntry = getLastEntry(json.autoware_contributors);
+  const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
+
+  const items = [
+    {
+      label: 'Total Unique Contributors',
+      value: latestEntry?.contributors_count || 0,
+    },
+    {
+      label: 'Code Contributors',
+      value: getLastEntry(json.autoware_code_contributors)?.contributors_count || 0,
+    },
+    {
+      label: 'Community Contributors',
+      value: getLastEntry(json.autoware_community_contributors)?.contributors_count || 0,
+    },
+  ];
+
+  document.querySelector('#contributors-stats').innerHTML = createStatsHtml(
+    date,
+    items,
+    COLORS.contributors,
+  );
+}
+
+// =============================================================================
+// Initialize
+// =============================================================================
+
+fetch('stars_history.json')
+  .then((res) => res.json())
+  .then((json) => {
+    renderStarsChart(json);
+    renderStarsStats(json);
   })
   .catch((error) => {
-    console.log('Error loading contributor_history/contributors_history.json:', error);
-    document.querySelector('#contributors-chart').innerHTML =
-      '<p style="color: #666;">Contributor history data not available</p>';
+    console.log('Error loading stars_history.json:', error);
+    showError('#stars-chart', 'Stars history data not available');
+  });
+
+fetch('contributors_history.json')
+  .then((res) => res.json())
+  .then((json) => {
+    renderContributorsChart(json);
+    renderContributorsStats(json);
+  })
+  .catch((error) => {
+    console.log('Error loading contributors_history.json:', error);
+    showError('#contributors-chart', 'Contributor history data not available');
   });
