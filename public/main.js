@@ -13,8 +13,9 @@ const COLORS = {
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
 };
 
-// Top 25 repositories by composite score (excluding archived repos)
+// Top 25 repositories by composite score + legacy repos
 const REPOSITORIES = [
+  // Active repositories (Top 25 by score)
   'autoware',
   'autoware_universe',
   'autoware_launch',
@@ -40,6 +41,18 @@ const REPOSITORIES = [
   'bevdet_vendor',
   'openadkit',
   'managed_transform_buffer',
+  // Legacy autoware_ai repositories (for historical tracking)
+  'autoware_ai',
+  'autoware_ai_perception',
+  'autoware_ai_planning',
+  'autoware_ai_utilities',
+  'autoware_ai_common',
+  'autoware_ai_simulation',
+  'autoware_ai_visualization',
+  'autoware_ai_docker',
+  'autoware_ai_messages',
+  'autoware_ai_documentation',
+  'autoware_ai_drivers',
 ];
 
 // =============================================================================
@@ -185,18 +198,18 @@ function renderStarsStats(json) {
   const latestEntry = getLastEntry(json.total_stars_history);
   const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
 
-  // Show total and top 10 repositories by composite score (excluding archived)
+  // Show total and top 10 repositories by star count
   const topRepos = [
     'autoware',
     'autoware_universe',
-    'autoware_launch',
-    'autoware-documentation',
+    'autoware_ai_perception',
+    'autoware_ai_planning',
     'ros2_socketcan',
     'autoware_core',
     'autoware.privately-owned-vehicles',
-    'autoware_msgs',
-    'autoware_tools',
-    'AWSIM-Labs',
+    'autoware-documentation',
+    'autoware_ai_utilities',
+    'autoware_ai_simulation',
   ];
   const items = [{ label: 'Total Unique Stars', value: latestEntry?.star_count || 0 }];
 

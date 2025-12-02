@@ -38,7 +38,12 @@ Tracks the cumulative number of unique contributors over time.
 - autoware_rosbag2_anonymizer, autoware.off-road, autoware_rviz_plugins
 - bevdet_vendor, openadkit, managed_transform_buffer
 
-**Note:** Archived repositories and repositories not updated within 1 year are excluded.
+**Legacy Repositories (autoware_ai, included for historical tracking):**
+- autoware_ai, autoware_ai_perception, autoware_ai_planning, autoware_ai_utilities
+- autoware_ai_common, autoware_ai_simulation, autoware_ai_visualization
+- autoware_ai_docker, autoware_ai_messages, autoware_ai_documentation, autoware_ai_drivers
+
+**Note:** Archived repositories and repositories not updated within 1 year are excluded, except for legacy autoware_ai repositories.
 
 ### Contributor Rankings
 Monthly and yearly rankings for four categories:
@@ -51,8 +56,8 @@ Monthly and yearly rankings for four categories:
 | **Best Reviewer** | Reviews + Comments | PR reviews + PR comments (excluding self-reviews) |
 
 **MVP Calculation:**
+- Only contributors who appear in ALL THREE categories are eligible
 - Each contributor's rank in the three categories is summed
-- Contributors not appearing in a category receive rank = (last place + 1)
 - Ties are broken by total contribution count across all categories
 
 **Note**: Bot accounts (dependabot, github-actions, codecov, etc.) are excluded from rankings.

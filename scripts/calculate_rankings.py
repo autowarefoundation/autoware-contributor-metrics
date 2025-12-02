@@ -229,26 +229,24 @@ class RankingCalculator:
         return period_counts[:limit]
 
     def _calculate_mvp_ranking(self, code_ranking: List[Dict], community_ranking: List[Dict], review_ranking: List[Dict], limit: int = 50) -> List[Dict]:
-        """Calculate MVP ranking based on combined ranks across all categories"""
+        """Calculate MVP ranking based on combined ranks across all categories
+
+        Only includes authors who appear in ALL THREE categories.
+        """
         # Create rank lookup dictionaries
         code_ranks = {item["author"]: item["rank"] for item in code_ranking}
         community_ranks = {item["author"]: item["rank"] for item in community_ranking}
         review_ranks = {item["author"]: item["rank"] for item in review_ranking}
 
-        # Default rank for those not in a category (last place + 1)
-        default_code_rank = len(code_ranking) + 1
-        default_community_rank = len(community_ranking) + 1
-        default_review_rank = len(review_ranking) + 1
-
-        # Get all unique authors from any category
-        all_authors = set(code_ranks.keys()) | set(community_ranks.keys()) | set(review_ranks.keys())
+        # Get authors who appear in ALL three categories
+        all_authors = set(code_ranks.keys()) & set(community_ranks.keys()) & set(review_ranks.keys())
 
         # Calculate combined score for each author
         mvp_scores = []
         for author in all_authors:
-            code_rank = code_ranks.get(author, default_code_rank)
-            community_rank = community_ranks.get(author, default_community_rank)
-            review_rank = review_ranks.get(author, default_review_rank)
+            code_rank = code_ranks[author]
+            community_rank = community_ranks[author]
+            review_rank = review_ranks[author]
 
             total_rank = code_rank + community_rank + review_rank
 

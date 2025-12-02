@@ -1,7 +1,8 @@
-# Top 25 Autoware Foundation repositories by composite score
+# Top 25 Autoware Foundation repositories by composite score + legacy repos
 # Score = stars + forks
-# Excluded: archived repos, repos not updated within 1 year
+# Excluded: archived repos, repos not updated within 1 year (except autoware_ai legacy repos)
 REPOSITORIES = [
+    # Active repositories (Top 25 by score)
     "autoware",                       # score: 14249 (10799 stars + 3450 forks)
     "autoware_universe",              # score: 2187 (1374 stars + 813 forks)
     "autoware_launch",                # score: 453 (46 stars + 407 forks)
@@ -27,4 +28,16 @@ REPOSITORIES = [
     "bevdet_vendor",                  # score: 9 (6 stars + 3 forks)
     "openadkit",                      # score: 9 (5 stars + 4 forks)
     "managed_transform_buffer",       # score: 9 (5 stars + 4 forks)
+    # Legacy autoware_ai repositories (for historical star tracking)
+    "autoware_ai",                    # score: 63 (47 stars + 16 forks)
+    "autoware_ai_perception",         # score: 620 (423 stars + 197 forks)
+    "autoware_ai_planning",           # score: 371 (224 stars + 147 forks)
+    "autoware_ai_utilities",          # score: 98 (62 stars + 36 forks)
+    "autoware_ai_common",             # score: 84 (38 stars + 46 forks)
+    "autoware_ai_simulation",         # score: 83 (52 stars + 31 forks)
+    "autoware_ai_visualization",      # score: 57 (27 stars + 30 forks)
+    "autoware_ai_docker",             # score: 56 (24 stars + 32 forks)
+    "autoware_ai_messages",           # score: 40 (15 stars + 25 forks)
+    "autoware_ai_documentation",      # score: 40 (22 stars + 18 forks)
+    "autoware_ai_drivers",            # score: 36 (17 stars + 19 forks)
 ]
