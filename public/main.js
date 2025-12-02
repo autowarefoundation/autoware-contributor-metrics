@@ -132,7 +132,7 @@ function renderStarsChart(json) {
 
   const options = createChartOptions({
     series,
-    title: 'GitHub Stars Over Time',
+    title: 'GitHub Star Growth Over Time',
     yAxisTitle: 'Number of Stars',
     colors: COLORS.stars,
   });
