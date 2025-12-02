@@ -37,13 +37,19 @@ Tracks the cumulative number of unique contributors over time.
 - And 10+ more Autoware Foundation repositories
 
 ### Contributor Rankings
-Monthly and yearly rankings for three categories:
+Monthly and yearly rankings for four categories:
 
 | Category | Metric | Description |
 |----------|--------|-------------|
+| **MVP** | Combined Rank | Sum of ranks across all three categories (lower is better) |
 | **Best Committer** | Merged PR count | Number of Pull Requests merged |
 | **Best Evangelist** | Posts + Comments | Issue/Discussion posts created + comments made |
 | **Best Reviewer** | Reviews + Comments | PR reviews + PR comments (excluding self-reviews) |
+
+**MVP Calculation:**
+- Each contributor's rank in the three categories is summed
+- Contributors not appearing in a category receive rank = (last place + 1)
+- Ties are broken by total contribution count across all categories
 
 **Note**: Bot accounts (dependabot, github-actions, codecov, etc.) are excluded from rankings.
 

@@ -248,23 +248,25 @@ fetch('contributors_history.json')
 
 let rankingsData = null;
 let currentPeriodType = 'monthly';
+let mvpChart = null;
 let codeChart = null;
 let communityChart = null;
 let reviewChart = null;
 
 const RANKING_COLORS = {
+  mvp: '#FFD700',
   code: '#00D9FF',
   community: '#FF6B6B',
   review: '#4ECDC4',
 };
 
-function createRankingChart(elementId, data, color) {
+function createRankingChart(elementId, data, color, valueKey = 'count', valueName = 'Count') {
   const topData = data.slice(0, 15);
 
   const options = {
     series: [{
-      name: 'Count',
-      data: topData.map(item => item.count),
+      name: valueName,
+      data: topData.map(item => item[valueKey]),
     }],
     chart: {
       type: 'bar',
@@ -337,6 +339,12 @@ function updateRankingCharts(periodKey) {
     console.log('No data for period:', periodKey);
     return;
   }
+
+  if (mvpChart) {
+    mvpChart.destroy();
+  }
+  mvpChart = createRankingChart('mvp-ranking-table', periodData.mvp || [], RANKING_COLORS.mvp, 'score', 'Score');
+  mvpChart.render();
 
   if (codeChart) {
     codeChart.destroy();

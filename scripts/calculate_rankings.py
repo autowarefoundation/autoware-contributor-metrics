@@ -227,6 +227,51 @@ class RankingCalculator:
 
         return period_counts[:limit]
 
+    def _calculate_mvp_ranking(self, code_ranking: List[Dict], community_ranking: List[Dict], review_ranking: List[Dict], limit: int = 50) -> List[Dict]:
+        """Calculate MVP ranking based on combined ranks across all categories"""
+        # Create rank lookup dictionaries
+        code_ranks = {item["author"]: item["rank"] for item in code_ranking}
+        community_ranks = {item["author"]: item["rank"] for item in community_ranking}
+        review_ranks = {item["author"]: item["rank"] for item in review_ranking}
+
+        # Default rank for those not in a category (last place + 1)
+        default_code_rank = len(code_ranking) + 1
+        default_community_rank = len(community_ranking) + 1
+        default_review_rank = len(review_ranking) + 1
+
+        # Get all unique authors from any category
+        all_authors = set(code_ranks.keys()) | set(community_ranks.keys()) | set(review_ranks.keys())
+
+        # Calculate combined score for each author
+        mvp_scores = []
+        for author in all_authors:
+            code_rank = code_ranks.get(author, default_code_rank)
+            community_rank = community_ranks.get(author, default_community_rank)
+            review_rank = review_ranks.get(author, default_review_rank)
+
+            total_rank = code_rank + community_rank + review_rank
+
+            # Get actual counts for tiebreaker
+            code_count = next((item["count"] for item in code_ranking if item["author"] == author), 0)
+            community_count = next((item["count"] for item in community_ranking if item["author"] == author), 0)
+            review_count = next((item["count"] for item in review_ranking if item["author"] == author), 0)
+            total_count = code_count + community_count + review_count
+
+            mvp_scores.append({
+                "author": author,
+                "score": total_rank,
+                "count": total_count,
+            })
+
+        # Sort by score (ascending), then by total count (descending) for tiebreaker
+        mvp_scores.sort(key=lambda x: (x["score"], -x["count"], x["author"]))
+
+        # Add rank and limit
+        for i, item in enumerate(mvp_scores[:limit], 1):
+            item["rank"] = i
+
+        return mvp_scores[:limit]
+
     def generate_rankings(self) -> Dict:
         """Generate all rankings (monthly and yearly)"""
         # Get all unique months and years
@@ -243,19 +288,31 @@ class RankingCalculator:
         # Generate monthly rankings
         monthly = {}
         for month in sorted(all_months):
+            code_ranking = self._generate_ranking(self.code_contributions, month)
+            community_ranking = self._generate_ranking(self.community_contributions, month)
+            review_ranking = self._generate_ranking(self.review_contributions, month)
+            mvp_ranking = self._calculate_mvp_ranking(code_ranking, community_ranking, review_ranking)
+
             monthly[month] = {
-                "code": self._generate_ranking(self.code_contributions, month),
-                "community": self._generate_ranking(self.community_contributions, month),
-                "review": self._generate_ranking(self.review_contributions, month),
+                "code": code_ranking,
+                "community": community_ranking,
+                "review": review_ranking,
+                "mvp": mvp_ranking,
             }
 
         # Generate yearly rankings
         yearly = {}
         for year in sorted(all_years):
+            code_ranking = self._generate_yearly_ranking(self.code_contributions, year)
+            community_ranking = self._generate_yearly_ranking(self.community_contributions, year)
+            review_ranking = self._generate_yearly_ranking(self.review_contributions, year)
+            mvp_ranking = self._calculate_mvp_ranking(code_ranking, community_ranking, review_ranking)
+
             yearly[year] = {
-                "code": self._generate_yearly_ranking(self.code_contributions, year),
-                "community": self._generate_yearly_ranking(self.community_contributions, year),
-                "review": self._generate_yearly_ranking(self.review_contributions, year),
+                "code": code_ranking,
+                "community": community_ranking,
+                "review": review_ranking,
+                "mvp": mvp_ranking,
             }
 
         return {
@@ -350,6 +407,7 @@ def main():
         print(f"  Code contributors: {len(rankings['monthly'][latest_month]['code'])}")
         print(f"  Community contributors: {len(rankings['monthly'][latest_month]['community'])}")
         print(f"  Review contributors: {len(rankings['monthly'][latest_month]['review'])}")
+        print(f"  MVP candidates: {len(rankings['monthly'][latest_month]['mvp'])}")
 
 
 if __name__ == "__main__":
