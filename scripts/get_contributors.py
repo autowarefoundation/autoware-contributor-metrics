@@ -141,10 +141,11 @@ class GitHubGraphQLClient:
         all_edges = []
         page_count = 0
 
-        # Add reviews field only for pullRequests (simplified to avoid query complexity limits)
-        reviews_field = ""
+        # Add mergedAt and reviews field only for pullRequests (simplified to avoid query complexity limits)
+        pr_extra_fields = ""
         if contributor_type == "pullRequests":
-            reviews_field = """
+            pr_extra_fields = """
+                            mergedAt
                             reviews(first:100) {
                                 edges {
                                     node {
@@ -178,7 +179,7 @@ class GitHubGraphQLClient:
                                         createdAt
                                     }}
                                 }}
-                            }}{reviews_field}
+                            }}{pr_extra_fields}
                         }}
                     }}
                 }}

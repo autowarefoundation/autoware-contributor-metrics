@@ -41,7 +41,7 @@ Monthly and yearly rankings for three categories:
 
 | Category | Metric | Description |
 |----------|--------|-------------|
-| **Best Committer** | PR count | Number of Pull Requests created |
+| **Best Committer** | Merged PR count | Number of Pull Requests merged |
 | **Best Evangelist** | Posts + Comments | Issue/Discussion posts created + comments made |
 | **Best Reviewer** | Reviews + Comments | PR reviews + PR comments (excluding self-reviews) |
 

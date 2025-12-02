@@ -49,7 +49,7 @@ class RankingCalculator:
             return None
 
     def process_prs(self, file_path: str) -> None:
-        """Process PR file for code contributions (PR count per author)"""
+        """Process PR file for code contributions (merged PR count per author)"""
         try:
             with open(file_path, 'r') as f:
                 data = json.load(f)
@@ -64,13 +64,18 @@ class RankingCalculator:
                 if node.get("author") is None:
                     continue
 
-                author = node["author"].get("login")
-                created_at = node.get("createdAt")
-
-                if not author or not created_at or self._is_bot(author):
+                # Only count merged PRs
+                merged_at = node.get("mergedAt")
+                if not merged_at:
                     continue
 
-                date = self._parse_date(created_at)
+                author = node["author"].get("login")
+
+                if not author or self._is_bot(author):
+                    continue
+
+                # Use mergedAt date for ranking
+                date = self._parse_date(merged_at)
                 if date and date >= self.start_date:
                     month_key = self._get_month_key(date)
                     self.code_contributions[author][month_key] += 1
