@@ -141,6 +141,21 @@ class GitHubGraphQLClient:
         all_edges = []
         page_count = 0
 
+        # Add reviews field only for pullRequests (simplified to avoid query complexity limits)
+        reviews_field = ""
+        if contributor_type == "pullRequests":
+            reviews_field = """
+                            reviews(first:100) {
+                                edges {
+                                    node {
+                                        author {
+                                            login
+                                        }
+                                        createdAt
+                                    }
+                                }
+                            }"""
+
         query = f"""
         query($cursor: String!, $repository: String!) {{
             repository(owner:"autowarefoundation", name:$repository) {{
@@ -163,7 +178,7 @@ class GitHubGraphQLClient:
                                         createdAt
                                     }}
                                 }}
-                            }}
+                            }}{reviews_field}
                         }}
                     }}
                 }}

@@ -3,31 +3,77 @@
 ## Check the metrics
 Visit the following page: https://tier4.github.io/autoware-contributor-metrics/index.html
 
+## Metrics Overview
+
+### GitHub Stars History
+
+Tracks the cumulative number of unique stargazers across Autoware Foundation repositories over time.
+
+**Total Unique Stars Calculation:**
+- Collects all stargazers from 25+ Autoware repositories via GitHub GraphQL API
+- If the same user starred multiple repositories, only the **earliest star date** is counted
+- Result: One star per unique GitHub user across all repositories
+
+**Example:** If user A starred `autoware` on Jan 1 and `autoware_universe` on Feb 1, they are counted once on Jan 1.
+
+### GitHub Contributors History
+
+Tracks the cumulative number of unique contributors over time.
+
+**Total Unique Contributors Calculation:**
+- **Code Contributors**: Users who created at least one Pull Request
+- **Community Contributors**: Users who created Issues, Discussions, or commented on them
+- **Total Contributors**: Union of Code + Community contributors
+  - If a user contributed to both, only the **earliest contribution date** is counted
+  - Each user is counted exactly once across all repositories
+
+**Example:** If user B created a PR on Mar 1 and commented on an Issue on Feb 1, they appear in Total Contributors on Feb 1.
+
+**Target Repositories:**
+- autoware, autoware_core, autoware_universe, autoware_common
+- autoware_msgs, autoware_adapi_msgs, autoware_internal_msgs
+- autoware_cmake, autoware_utils, autoware_lanelet2_extension
+- autoware_launch, autoware-documentation, autoware_tools
+- And 10+ more Autoware Foundation repositories
+
+### Contributor Rankings
+Monthly and yearly rankings for three categories:
+
+| Category | Metric | Description |
+|----------|--------|-------------|
+| **Best Committer** | PR count | Number of Pull Requests created |
+| **Best Evangelist** | Posts + Comments | Issue/Discussion posts created + comments made |
+| **Best Reviewer** | Reviews + Comments | PR reviews + PR comments (excluding self-reviews) |
+
+**Note**: Bot accounts (dependabot, github-actions, codecov, etc.) are excluded from rankings.
+
 ## How to run locally
 
-1. install dependencies
-```
+1. Install dependencies
+```bash
 pip install -r requirements.txt
 ```
 
-2. run the scripts
-```
+2. Run the scripts
+```bash
 python scripts/get_contributors.py --token <GitHubToken>
 python scripts/get_stargazers.py --token <GitHubToken>
 python scripts/calculate_contributor_history.py
 python scripts/calculate_stargazers_history.py
+python scripts/calculate_rankings.py
 ```
 
-3. copy the results to public folder
-```
+3. Copy the results to public folder
+```bash
 cp results/stars_history.json public/
 cp results/contributors_history.json public/
+cp results/rankings.json public/
 ```
 
-4. start the server
-```
+4. Start the server
+```bash
 cd public
 python -m http.server 8000
 ```
 
-5. visit the following page: http://localhost:8000/index.html
+5. Visit the following page: http://localhost:8000/index.html

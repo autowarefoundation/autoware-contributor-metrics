@@ -241,3 +241,132 @@ fetch('contributors_history.json')
     console.log('Error loading contributors_history.json:', error);
     showError('#contributors-chart', 'Contributor history data not available');
   });
+
+// =============================================================================
+// Rankings Tables
+// =============================================================================
+
+let rankingsData = null;
+let currentPeriodType = 'monthly';
+let codeTable = null;
+let communityTable = null;
+let reviewTable = null;
+
+function createRankingTable(elementId, data) {
+  return new Tabulator(`#${elementId}`, {
+    data: data,
+    layout: 'fitColumns',
+    height: '400px',
+    columns: [
+      { title: 'Rank', field: 'rank', width: 60, hozAlign: 'center' },
+      {
+        title: 'Author',
+        field: 'author',
+        formatter: function (cell) {
+          const author = cell.getValue();
+          return `<a href="https://github.com/${author}" target="_blank" rel="noopener noreferrer">${author}</a>`;
+        },
+      },
+      { title: 'Count', field: 'count', width: 80, hozAlign: 'right', sorter: 'number' },
+    ],
+    pagination: 'local',
+    paginationSize: 10,
+    paginationSizeSelector: [10, 25, 50],
+  });
+}
+
+function updateRankingTables(periodKey) {
+  const periodData = currentPeriodType === 'monthly'
+    ? rankingsData.monthly[periodKey]
+    : rankingsData.yearly[periodKey];
+
+  if (!periodData) {
+    console.log('No data for period:', periodKey);
+    return;
+  }
+
+  if (codeTable) {
+    codeTable.setData(periodData.code || []);
+  } else {
+    codeTable = createRankingTable('code-ranking-table', periodData.code || []);
+  }
+
+  if (communityTable) {
+    communityTable.setData(periodData.community || []);
+  } else {
+    communityTable = createRankingTable('community-ranking-table', periodData.community || []);
+  }
+
+  if (reviewTable) {
+    reviewTable.setData(periodData.review || []);
+  } else {
+    reviewTable = createRankingTable('review-ranking-table', periodData.review || []);
+  }
+}
+
+function populatePeriodSelector() {
+  const select = document.getElementById('period-select');
+  select.innerHTML = '';
+
+  const periods = currentPeriodType === 'monthly'
+    ? Object.keys(rankingsData.monthly).sort().reverse()
+    : Object.keys(rankingsData.yearly).sort().reverse();
+
+  periods.forEach((period) => {
+    const option = document.createElement('option');
+    option.value = period;
+    option.textContent = period;
+    select.appendChild(option);
+  });
+
+  if (periods.length > 0) {
+    updateRankingTables(periods[0]);
+  }
+}
+
+function setupRankingsUI() {
+  const btnMonthly = document.getElementById('btn-monthly');
+  const btnYearly = document.getElementById('btn-yearly');
+  const periodSelect = document.getElementById('period-select');
+  const updatedSpan = document.getElementById('rankings-updated');
+
+  if (rankingsData.last_updated) {
+    updatedSpan.textContent = `Last updated: ${formatDate(rankingsData.last_updated)}`;
+  }
+
+  btnMonthly.addEventListener('click', () => {
+    currentPeriodType = 'monthly';
+    btnMonthly.classList.remove('btn-outline-primary');
+    btnMonthly.classList.add('btn-primary');
+    btnYearly.classList.remove('btn-primary');
+    btnYearly.classList.add('btn-outline-primary');
+    populatePeriodSelector();
+  });
+
+  btnYearly.addEventListener('click', () => {
+    currentPeriodType = 'yearly';
+    btnYearly.classList.remove('btn-outline-primary');
+    btnYearly.classList.add('btn-primary');
+    btnMonthly.classList.remove('btn-primary');
+    btnMonthly.classList.add('btn-outline-primary');
+    populatePeriodSelector();
+  });
+
+  periodSelect.addEventListener('change', (e) => {
+    updateRankingTables(e.target.value);
+  });
+
+  populatePeriodSelector();
+}
+
+fetch('rankings.json')
+  .then((res) => res.json())
+  .then((json) => {
+    rankingsData = json;
+    setupRankingsUI();
+  })
+  .catch((error) => {
+    console.log('Error loading rankings.json:', error);
+    document.getElementById('code-ranking-table').innerHTML =
+      '<p style="color: #666;">Rankings data not available</p>';
+  });
