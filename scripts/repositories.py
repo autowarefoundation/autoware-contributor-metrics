@@ -1,28 +1,29 @@
-# Top 25 Autoware Foundation repositories by composite score (stars + forks + recency)
+# Top 25 Autoware Foundation repositories by composite score
+# Score = stars + forks + recency_bonus (50 if updated within 1 year)
 REPOSITORIES = [
-    "autoware",
-    "autoware_universe",
-    "autoware_core",
-    "autoware.privately-owned-vehicles",
-    "ros2_socketcan",
-    "autoware-documentation",
-    "autoware_launch",
-    "autoware_msgs",
-    "AWSIM-Labs",
-    "autoware_tools",
-    "autoware_common",
-    "autoware-github-actions",
-    "sample_sensor_kit_launch",
-    "sample_vehicle_launch",
-    "autoware_adapi_msgs",
-    "autoware_internal_msgs",
-    "autoware_cmake",
-    "autoware_utils",
-    "autoware_lanelet2_extension",
-    "autoware_rviz_plugins",
-    "openadkit",
-    "autoware.off-road",
-    "autoware_ai",
-    "autoware_ai_perception",
-    "autoware_ai_planning",
+    "autoware",                       # score: 14299 (10799 stars + 3450 forks + 50)
+    "autoware_universe",              # score: 2237 (1374 stars + 813 forks + 50)
+    "autoware_ai_perception",         # score: 620 (423 stars + 197 forks, inactive)
+    "autoware_launch",                # score: 503 (46 stars + 407 forks + 50)
+    "autoware_ai_planning",           # score: 371 (224 stars + 147 forks, inactive)
+    "sample_sensor_kit_launch",       # score: 382 (16 stars + 316 forks + 50)
+    "sample_vehicle_launch",          # score: 339 (10 stars + 279 forks + 50)
+    "ros2_socketcan",                 # score: 310 (170 stars + 90 forks + 50)
+    "autoware_core",                  # score: 303 (149 stars + 104 forks + 50)
+    "autoware-documentation",         # score: 318 (104 stars + 164 forks + 50)
+    "autoware.privately-owned-vehicles",  # score: 194 (110 stars + 34 forks + 50)
+    "autoware_common",                # score: 148 (27 stars + 71 forks + 50)
+    "autoware_msgs",                  # score: 152 (37 stars + 65 forks + 50)
+    "autoware_tools",                 # score: 131 (32 stars + 49 forks + 50)
+    "AWSIM-Labs",                     # score: 109 (37 stars + 22 forks + 50)
+    "autoware-github-actions",        # score: 103 (23 stars + 30 forks + 50)
+    "autoware_utils",                 # score: 92 (6 stars + 36 forks + 50)
+    "autoware_adapi_msgs",            # score: 88 (6 stars + 32 forks + 50)
+    "autoware_lanelet2_extension",    # score: 86 (5 stars + 31 forks + 50)
+    "autoware_internal_msgs",         # score: 81 (2 stars + 29 forks + 50)
+    "autoware_cmake",                 # score: 72 (2 stars + 20 forks + 50)
+    "autoware.off-road",              # score: 66 (14 stars + 2 forks + 50)
+    "autoware_ai",                    # score: 63 (47 stars + 16 forks, inactive)
+    "autoware_rviz_plugins",          # score: 62 (3 stars + 9 forks + 50)
+    "openadkit",                      # score: 59 (5 stars + 4 forks + 50)
 ]

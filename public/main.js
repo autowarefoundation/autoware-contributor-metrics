@@ -3,15 +3,43 @@
 // =============================================================================
 
 const COLORS = {
-  stars: ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181'],
+  stars: [
+    '#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181',
+    '#A8E6CF', '#DDA0DD', '#87CEEB', '#F0E68C', '#E6E6FA', '#FFA07A',
+    '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8B500', '#7DCEA0',
+    '#F1948A', '#AED6F1', '#D7BDE2', '#A3E4D7', '#FAD7A0', '#D5DBDB',
+    '#ABEBC6', '#F9E79F',
+  ],
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
 };
 
-const STARS_KEY_REPOS = [
-  'autoware_stars_history',
-  'autoware_core_stars_history',
-  'autoware_universe_stars_history',
-  'autoware.privately-owned-vehicles_stars_history',
+// Top 25 repositories by composite score (same order as repositories.py)
+const REPOSITORIES = [
+  'autoware',
+  'autoware_universe',
+  'autoware_ai_perception',
+  'autoware_launch',
+  'sample_sensor_kit_launch',
+  'autoware_ai_planning',
+  'sample_vehicle_launch',
+  'autoware-documentation',
+  'ros2_socketcan',
+  'autoware_core',
+  'autoware.privately-owned-vehicles',
+  'autoware_msgs',
+  'autoware_common',
+  'autoware_tools',
+  'AWSIM-Labs',
+  'autoware-github-actions',
+  'autoware_utils',
+  'autoware_adapi_msgs',
+  'autoware_lanelet2_extension',
+  'autoware_internal_msgs',
+  'autoware_cmake',
+  'autoware.off-road',
+  'autoware_ai',
+  'autoware_rviz_plugins',
+  'openadkit',
 ];
 
 // =============================================================================
@@ -121,10 +149,12 @@ function renderStarsChart(json) {
     },
   ];
 
-  STARS_KEY_REPOS.forEach((repoKey) => {
+  // Add all 25 repositories
+  REPOSITORIES.forEach((repo) => {
+    const repoKey = `${repo}_stars_history`;
     if (json[repoKey]) {
       series.push({
-        name: repoKey.replace('_stars_history', ''),
+        name: repo,
         data: mapToChartData(json[repoKey], 'star_count'),
       });
     }
@@ -135,7 +165,18 @@ function renderStarsChart(json) {
     title: 'GitHub Star Growth Over Time',
     yAxisTitle: 'Number of Stars',
     colors: COLORS.stars,
+    showLegend: true,
   });
+
+  // Increase chart height for better visibility with many series
+  options.chart.height = 600;
+  options.legend = {
+    position: 'bottom',
+    horizontalAlign: 'center',
+    floating: false,
+    fontSize: '12px',
+    markers: { width: 10, height: 10 },
+  };
 
   new ApexCharts(document.querySelector('#stars-chart'), options).render();
 }
@@ -144,13 +185,27 @@ function renderStarsStats(json) {
   const latestEntry = getLastEntry(json.total_stars_history);
   const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
 
+  // Show total and top 10 repositories by composite score (stars + forks + recency)
+  const topRepos = [
+    'autoware',
+    'autoware_universe',
+    'autoware_ai_perception',
+    'autoware_launch',
+    'sample_sensor_kit_launch',
+    'autoware_ai_planning',
+    'sample_vehicle_launch',
+    'autoware-documentation',
+    'ros2_socketcan',
+    'autoware_core',
+  ];
   const items = [{ label: 'Total Unique Stars', value: latestEntry?.star_count || 0 }];
 
-  STARS_KEY_REPOS.forEach((repoKey) => {
+  topRepos.forEach((repo) => {
+    const repoKey = `${repo}_stars_history`;
     const entry = getLastEntry(json[repoKey] || []);
     if (entry) {
       items.push({
-        label: repoKey.replace('_stars_history', ''),
+        label: repo,
         value: entry.star_count,
       });
     }
