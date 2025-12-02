@@ -29,14 +29,16 @@ Tracks the cumulative number of unique contributors over time.
 
 **Example:** If user B created a PR on Mar 1 and commented on an Issue on Feb 1, they appear in Total Contributors on Feb 1.
 
-**Target Repositories (Top 25 by composite score: stars + forks + recency):**
-- autoware, autoware_universe, autoware_core, autoware.privately-owned-vehicles
-- ros2_socketcan, autoware-documentation, autoware_launch, autoware_msgs
-- AWSIM-Labs, autoware_tools, autoware_common, autoware-github-actions
-- sample_sensor_kit_launch, sample_vehicle_launch, autoware_adapi_msgs
-- autoware_internal_msgs, autoware_cmake, autoware_utils
-- autoware_lanelet2_extension, autoware_rviz_plugins, openadkit, autoware.off-road
-- autoware_ai, autoware_ai_perception, autoware_ai_planning
+**Target Repositories (Top 25 by composite score: stars + forks):**
+- autoware, autoware_universe, autoware_launch, autoware-documentation
+- ros2_socketcan, autoware_core, autoware.privately-owned-vehicles, autoware_msgs
+- autoware_tools, AWSIM-Labs, autoware-github-actions, autoware_utils
+- autoware_adapi_msgs, autoware_lanelet2_extension, autoware_internal_msgs
+- open-ad-kit-docs, spconv_cpp, cuda_blackboard, autoware_cmake
+- autoware_rosbag2_anonymizer, autoware.off-road, autoware_rviz_plugins
+- bevdet_vendor, openadkit, managed_transform_buffer
+
+**Note:** Archived repositories and repositories not updated within 1 year are excluded.
 
 ### Contributor Rankings
 Monthly and yearly rankings for four categories:

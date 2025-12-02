@@ -13,21 +13,16 @@ const COLORS = {
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
 };
 
-// Top 25 repositories by composite score (same order as repositories.py)
+// Top 25 repositories by composite score (excluding archived repos)
 const REPOSITORIES = [
   'autoware',
   'autoware_universe',
-  'autoware_ai_perception',
   'autoware_launch',
-  'sample_sensor_kit_launch',
-  'autoware_ai_planning',
-  'sample_vehicle_launch',
   'autoware-documentation',
   'ros2_socketcan',
   'autoware_core',
   'autoware.privately-owned-vehicles',
   'autoware_msgs',
-  'autoware_common',
   'autoware_tools',
   'AWSIM-Labs',
   'autoware-github-actions',
@@ -35,11 +30,16 @@ const REPOSITORIES = [
   'autoware_adapi_msgs',
   'autoware_lanelet2_extension',
   'autoware_internal_msgs',
+  'open-ad-kit-docs',
+  'spconv_cpp',
+  'cuda_blackboard',
   'autoware_cmake',
+  'autoware_rosbag2_anonymizer',
   'autoware.off-road',
-  'autoware_ai',
   'autoware_rviz_plugins',
+  'bevdet_vendor',
   'openadkit',
+  'managed_transform_buffer',
 ];
 
 // =============================================================================
@@ -185,18 +185,18 @@ function renderStarsStats(json) {
   const latestEntry = getLastEntry(json.total_stars_history);
   const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
 
-  // Show total and top 10 repositories by composite score (stars + forks + recency)
+  // Show total and top 10 repositories by composite score (excluding archived)
   const topRepos = [
     'autoware',
     'autoware_universe',
-    'autoware_ai_perception',
     'autoware_launch',
-    'sample_sensor_kit_launch',
-    'autoware_ai_planning',
-    'sample_vehicle_launch',
     'autoware-documentation',
     'ros2_socketcan',
     'autoware_core',
+    'autoware.privately-owned-vehicles',
+    'autoware_msgs',
+    'autoware_tools',
+    'AWSIM-Labs',
   ];
   const items = [{ label: 'Total Unique Stars', value: latestEntry?.star_count || 0 }];
 
