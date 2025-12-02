@@ -243,39 +243,92 @@ fetch('contributors_history.json')
   });
 
 // =============================================================================
-// Rankings Tables
+// Rankings Charts
 // =============================================================================
 
 let rankingsData = null;
 let currentPeriodType = 'monthly';
-let codeTable = null;
-let communityTable = null;
-let reviewTable = null;
+let codeChart = null;
+let communityChart = null;
+let reviewChart = null;
 
-function createRankingTable(elementId, data) {
-  return new Tabulator(`#${elementId}`, {
-    data: data,
-    layout: 'fitColumns',
-    height: '400px',
-    columns: [
-      { title: 'Rank', field: 'rank', width: 60, hozAlign: 'center' },
-      {
-        title: 'Author',
-        field: 'author',
-        formatter: function (cell) {
-          const author = cell.getValue();
-          return `<a href="https://github.com/${author}" target="_blank" rel="noopener noreferrer">${author}</a>`;
+const RANKING_COLORS = {
+  code: '#00D9FF',
+  community: '#FF6B6B',
+  review: '#4ECDC4',
+};
+
+function createRankingChart(elementId, data, color) {
+  const topData = data.slice(0, 15);
+
+  const options = {
+    series: [{
+      name: 'Count',
+      data: topData.map(item => item.count),
+    }],
+    chart: {
+      type: 'bar',
+      height: 400,
+      toolbar: { show: false },
+      events: {
+        dataPointSelection: function(event, chartContext, config) {
+          const author = topData[config.dataPointIndex].author;
+          window.open(`https://github.com/${author}`, '_blank', 'noopener,noreferrer');
         },
       },
-      { title: 'Count', field: 'count', width: 80, hozAlign: 'right', sorter: 'number' },
-    ],
-    pagination: 'local',
-    paginationSize: 10,
-    paginationSizeSelector: [10, 25, 50],
-  });
+    },
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        borderRadius: 4,
+        dataLabels: {
+          position: 'top',
+        },
+      },
+    },
+    dataLabels: {
+      enabled: true,
+      offsetX: 25,
+      style: {
+        fontSize: '12px',
+        colors: ['#333'],
+      },
+      formatter: function(val) {
+        return val;
+      },
+    },
+    xaxis: {
+      categories: topData.map(item => item.author),
+    },
+    yaxis: {
+      labels: {
+        style: {
+          fontSize: '11px',
+        },
+      },
+    },
+    colors: [color],
+    tooltip: {
+      y: {
+        formatter: function(val) {
+          return val;
+        },
+      },
+    },
+    grid: {
+      xaxis: {
+        lines: { show: true },
+      },
+      yaxis: {
+        lines: { show: false },
+      },
+    },
+  };
+
+  return new ApexCharts(document.querySelector(`#${elementId}`), options);
 }
 
-function updateRankingTables(periodKey) {
+function updateRankingCharts(periodKey) {
   const periodData = currentPeriodType === 'monthly'
     ? rankingsData.monthly[periodKey]
     : rankingsData.yearly[periodKey];
@@ -285,23 +338,23 @@ function updateRankingTables(periodKey) {
     return;
   }
 
-  if (codeTable) {
-    codeTable.setData(periodData.code || []);
-  } else {
-    codeTable = createRankingTable('code-ranking-table', periodData.code || []);
+  if (codeChart) {
+    codeChart.destroy();
   }
+  codeChart = createRankingChart('code-ranking-table', periodData.code || [], RANKING_COLORS.code);
+  codeChart.render();
 
-  if (communityTable) {
-    communityTable.setData(periodData.community || []);
-  } else {
-    communityTable = createRankingTable('community-ranking-table', periodData.community || []);
+  if (communityChart) {
+    communityChart.destroy();
   }
+  communityChart = createRankingChart('community-ranking-table', periodData.community || [], RANKING_COLORS.community);
+  communityChart.render();
 
-  if (reviewTable) {
-    reviewTable.setData(periodData.review || []);
-  } else {
-    reviewTable = createRankingTable('review-ranking-table', periodData.review || []);
+  if (reviewChart) {
+    reviewChart.destroy();
   }
+  reviewChart = createRankingChart('review-ranking-table', periodData.review || [], RANKING_COLORS.review);
+  reviewChart.render();
 }
 
 function populatePeriodSelector() {
@@ -320,7 +373,7 @@ function populatePeriodSelector() {
   });
 
   if (periods.length > 0) {
-    updateRankingTables(periods[0]);
+    updateRankingCharts(periods[0]);
   }
 }
 
@@ -353,7 +406,7 @@ function setupRankingsUI() {
   });
 
   periodSelect.addEventListener('change', (e) => {
-    updateRankingTables(e.target.value);
+    updateRankingCharts(e.target.value);
   });
 
   populatePeriodSelector();
