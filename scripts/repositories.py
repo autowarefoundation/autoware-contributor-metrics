@@ -1,43 +1,36 @@
-# Top 25 Autoware Foundation repositories by composite score + legacy repos
-# Score = stars + forks
-# Excluded: archived repos, repos not updated within 1 year (except autoware_ai legacy repos)
-REPOSITORIES = [
-    # Active repositories (Top 25 by score)
-    "autoware",                       # score: 14249 (10799 stars + 3450 forks)
-    "autoware_universe",              # score: 2187 (1374 stars + 813 forks)
-    "autoware_launch",                # score: 453 (46 stars + 407 forks)
-    "autoware-documentation",         # score: 268 (104 stars + 164 forks)
-    "ros2_socketcan",                 # score: 260 (170 stars + 90 forks)
-    "autoware_core",                  # score: 253 (149 stars + 104 forks)
-    "autoware.privately-owned-vehicles",  # score: 144 (110 stars + 34 forks)
-    "autoware_msgs",                  # score: 102 (37 stars + 65 forks)
-    "autoware_tools",                 # score: 81 (32 stars + 49 forks)
-    "AWSIM-Labs",                     # score: 59 (37 stars + 22 forks)
-    "autoware-github-actions",        # score: 53 (23 stars + 30 forks)
-    "autoware_utils",                 # score: 42 (6 stars + 36 forks)
-    "autoware_adapi_msgs",            # score: 38 (6 stars + 32 forks)
-    "autoware_lanelet2_extension",    # score: 36 (5 stars + 31 forks)
-    "autoware_internal_msgs",         # score: 31 (2 stars + 29 forks)
-    "open-ad-kit-docs",               # score: 24 (12 stars + 12 forks)
-    "spconv_cpp",                     # score: 23 (18 stars + 5 forks)
-    "cuda_blackboard",                # score: 22 (17 stars + 5 forks)
-    "autoware_cmake",                 # score: 22 (2 stars + 20 forks)
-    "autoware_rosbag2_anonymizer",    # score: 18 (12 stars + 6 forks)
-    "autoware.off-road",              # score: 16 (14 stars + 2 forks)
-    "autoware_rviz_plugins",          # score: 12 (3 stars + 9 forks)
-    "bevdet_vendor",                  # score: 9 (6 stars + 3 forks)
-    "openadkit",                      # score: 9 (5 stars + 4 forks)
-    "managed_transform_buffer",       # score: 9 (5 stars + 4 forks)
-    # Legacy autoware_ai repositories (for historical star tracking)
-    "autoware_ai",                    # score: 63 (47 stars + 16 forks)
-    "autoware_ai_perception",         # score: 620 (423 stars + 197 forks)
-    "autoware_ai_planning",           # score: 371 (224 stars + 147 forks)
-    "autoware_ai_utilities",          # score: 98 (62 stars + 36 forks)
-    "autoware_ai_common",             # score: 84 (38 stars + 46 forks)
-    "autoware_ai_simulation",         # score: 83 (52 stars + 31 forks)
-    "autoware_ai_visualization",      # score: 57 (27 stars + 30 forks)
-    "autoware_ai_docker",             # score: 56 (24 stars + 32 forks)
-    "autoware_ai_messages",           # score: 40 (15 stars + 25 forks)
-    "autoware_ai_documentation",      # score: 40 (22 stars + 18 forks)
-    "autoware_ai_drivers",            # score: 36 (17 stars + 19 forks)
-]
+# Repository loader utility
+# Loads repository list from public/repositories.json
+# Run fetch_repositories.py first to generate the JSON file
+
+import json
+from pathlib import Path
+
+
+def load_repositories() -> list:
+    """Load repository list from JSON file"""
+    # Try multiple paths to find the JSON file
+    possible_paths = [
+        Path(__file__).parent.parent / "public" / "repositories.json",
+        Path("public/repositories.json"),
+        Path("../public/repositories.json"),
+    ]
+
+    for path in possible_paths:
+        if path.exists():
+            with open(path, 'r') as f:
+                data = json.load(f)
+            return data.get("repositories", [])
+
+    raise FileNotFoundError(
+        "repositories.json not found. Run 'python scripts/fetch_repositories.py' first."
+    )
+
+
+# For backward compatibility - load repositories on import
+try:
+    REPOSITORIES = load_repositories()
+except FileNotFoundError:
+    # Fallback to empty list if JSON doesn't exist yet
+    print("Warning: repositories.json not found. Using empty list.")
+    print("Run 'python scripts/fetch_repositories.py' to generate the repository list.")
+    REPOSITORIES = []

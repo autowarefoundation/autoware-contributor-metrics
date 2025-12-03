@@ -39,6 +39,7 @@ jobs:
 
       - name: Execute script
         run: |
+          python scripts/fetch_repositories.py --token ${{ secrets.ACCESS_TOKEN }}
           python scripts/get_contributors.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
           python scripts/get_stargazers.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
           python scripts/calculate_contributor_history.py

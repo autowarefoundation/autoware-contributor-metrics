@@ -43,7 +43,7 @@ Tracks the cumulative number of unique contributors over time.
 - autoware_ai_common, autoware_ai_simulation, autoware_ai_visualization
 - autoware_ai_docker, autoware_ai_messages, autoware_ai_documentation, autoware_ai_drivers
 
-**Note:** Archived repositories and repositories not updated within 1 year are excluded, except for legacy autoware_ai repositories.
+**Note:** Archived repositories and repositories not updated within 2 years are excluded, except for legacy autoware_ai repositories.
 
 ### Contributor Rankings
 Monthly and yearly rankings for four categories:
@@ -71,8 +71,14 @@ pip install -r requirements.txt
 
 2. Run the scripts
 ```bash
+# First, fetch and generate repository list
+python scripts/fetch_repositories.py --token <GitHubToken>
+
+# Then fetch contributor and stargazer data
 python scripts/get_contributors.py --token <GitHubToken>
 python scripts/get_stargazers.py --token <GitHubToken>
+
+# Process the data
 python scripts/calculate_contributor_history.py
 python scripts/calculate_stargazers_history.py
 python scripts/calculate_rankings.py

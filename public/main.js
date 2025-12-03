@@ -13,47 +13,8 @@ const COLORS = {
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
 };
 
-// Top 25 repositories by composite score + legacy repos
-const REPOSITORIES = [
-  // Active repositories (Top 25 by score)
-  'autoware',
-  'autoware_universe',
-  'autoware_launch',
-  'autoware-documentation',
-  'ros2_socketcan',
-  'autoware_core',
-  'autoware.privately-owned-vehicles',
-  'autoware_msgs',
-  'autoware_tools',
-  'AWSIM-Labs',
-  'autoware-github-actions',
-  'autoware_utils',
-  'autoware_adapi_msgs',
-  'autoware_lanelet2_extension',
-  'autoware_internal_msgs',
-  'open-ad-kit-docs',
-  'spconv_cpp',
-  'cuda_blackboard',
-  'autoware_cmake',
-  'autoware_rosbag2_anonymizer',
-  'autoware.off-road',
-  'autoware_rviz_plugins',
-  'bevdet_vendor',
-  'openadkit',
-  'managed_transform_buffer',
-  // Legacy autoware_ai repositories (for historical tracking)
-  'autoware_ai',
-  'autoware_ai_perception',
-  'autoware_ai_planning',
-  'autoware_ai_utilities',
-  'autoware_ai_common',
-  'autoware_ai_simulation',
-  'autoware_ai_visualization',
-  'autoware_ai_docker',
-  'autoware_ai_messages',
-  'autoware_ai_documentation',
-  'autoware_ai_drivers',
-];
+// Repository list - will be loaded from repositories.json
+let REPOSITORIES = [];
 
 // =============================================================================
 // Utility Functions
@@ -288,26 +249,54 @@ function renderContributorsStats(json) {
 // Initialize
 // =============================================================================
 
-fetch('stars_history.json')
+// Load repositories first, then load chart data
+fetch('repositories.json')
   .then((res) => res.json())
-  .then((json) => {
-    renderStarsChart(json);
-    renderStarsStats(json);
-  })
-  .catch((error) => {
-    console.log('Error loading stars_history.json:', error);
-    showError('#stars-chart', 'Stars history data not available');
-  });
+  .then((repoData) => {
+    REPOSITORIES = repoData.repositories || [];
+    console.log(`Loaded ${REPOSITORIES.length} repositories`);
 
-fetch('contributors_history.json')
-  .then((res) => res.json())
-  .then((json) => {
-    renderContributorsChart(json);
-    renderContributorsStats(json);
+    // Now load chart data
+    fetch('stars_history.json')
+      .then((res) => res.json())
+      .then((json) => {
+        renderStarsChart(json);
+        renderStarsStats(json);
+      })
+      .catch((error) => {
+        console.log('Error loading stars_history.json:', error);
+        showError('#stars-chart', 'Stars history data not available');
+      });
+
+    fetch('contributors_history.json')
+      .then((res) => res.json())
+      .then((json) => {
+        renderContributorsChart(json);
+        renderContributorsStats(json);
+      })
+      .catch((error) => {
+        console.log('Error loading contributors_history.json:', error);
+        showError('#contributors-chart', 'Contributor history data not available');
+      });
   })
   .catch((error) => {
-    console.log('Error loading contributors_history.json:', error);
-    showError('#contributors-chart', 'Contributor history data not available');
+    console.log('Error loading repositories.json:', error);
+    // Fallback: try to load charts anyway (they may work without REPOSITORIES)
+    fetch('stars_history.json')
+      .then((res) => res.json())
+      .then((json) => {
+        renderStarsChart(json);
+        renderStarsStats(json);
+      })
+      .catch((err) => showError('#stars-chart', 'Stars history data not available'));
+
+    fetch('contributors_history.json')
+      .then((res) => res.json())
+      .then((json) => {
+        renderContributorsChart(json);
+        renderContributorsStats(json);
+      })
+      .catch((err) => showError('#contributors-chart', 'Contributor history data not available'));
   });
 
 // =============================================================================
