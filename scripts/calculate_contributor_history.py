@@ -3,6 +3,7 @@ import datetime
 from typing import Dict, List, Tuple
 from pathlib import Path
 from collections import defaultdict
+from repositories import REPOSITORIES
 
 class ContributorHistory:
     """Class to track contributor history and generate cumulative statistics"""
@@ -128,38 +129,27 @@ def main():
 
     history = ContributorHistory()
 
-    # Load community contributors (issues and discussions)
-    community_contributors_files = [
-        "cache/raw_contributor_data/autoware_discussions.json",
-        "cache/raw_contributor_data/autoware_issues.json",
-        "cache/raw_contributor_data/autoware_universe_issues.json",
-        "cache/raw_contributor_data/autoware_core_issues.json",
-        "cache/raw_contributor_data/autoware_common_issues.json",
-        "cache/raw_contributor_data/autoware_msgs_issues.json",
-        "cache/raw_contributor_data/autoware_launch_issues.json",
-        "cache/raw_contributor_data/autoware-documentation_issues.json",
-        "cache/raw_contributor_data/openadkit_issues.json"
-    ]
+    repositories = REPOSITORIES
+    cache_dir = Path("cache/raw_contributor_data")
 
+    # Load community contributors (issues and discussions)
     print("Loading community contributors...")
-    for file_path in community_contributors_files:
-        history.load_contributors_from_file(file_path, history.community_contributors)
+    for repo in repositories:
+        issues_file = cache_dir / f"{repo}_issues.json"
+        if issues_file.exists():
+            history.load_contributors_from_file(str(issues_file), history.community_contributors)
+
+    # Special case: autoware discussions
+    discussions_file = cache_dir / "autoware_discussions.json"
+    if discussions_file.exists():
+        history.load_contributors_from_file(str(discussions_file), history.community_contributors)
 
     # Load code contributors (pull requests)
-    code_contributors_files = [
-        "cache/raw_contributor_data/autoware_prs.json",
-        "cache/raw_contributor_data/autoware_universe_prs.json",
-        "cache/raw_contributor_data/autoware_core_prs.json",
-        "cache/raw_contributor_data/autoware_common_prs.json",
-        "cache/raw_contributor_data/autoware_msgs_prs.json",
-        "cache/raw_contributor_data/autoware_launch_prs.json",
-        "cache/raw_contributor_data/autoware-documentation_prs.json",
-        "cache/raw_contributor_data/openadkit_prs.json"
-    ]
-
     print("Loading code contributors...")
-    for file_path in code_contributors_files:
-        history.load_contributors_from_file(file_path, history.code_contributors)
+    for repo in repositories:
+        prs_file = cache_dir / f"{repo}_prs.json"
+        if prs_file.exists():
+            history.load_contributors_from_file(str(prs_file), history.code_contributors)
 
     # Merge contributors
     print("Merging contributors...")
