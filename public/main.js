@@ -132,7 +132,7 @@ function renderStarsChart(json) {
 
   const options = createChartOptions({
     series,
-    title: 'GitHub Stars Over Time',
+    title: 'GitHub Star Growth Over Time',
     yAxisTitle: 'Number of Stars',
     colors: COLORS.stars,
   });
@@ -240,4 +240,194 @@ fetch('contributors_history.json')
   .catch((error) => {
     console.log('Error loading contributors_history.json:', error);
     showError('#contributors-chart', 'Contributor history data not available');
+  });
+
+// =============================================================================
+// Rankings Charts
+// =============================================================================
+
+let rankingsData = null;
+let currentPeriodType = 'monthly';
+let mvpChart = null;
+let codeChart = null;
+let communityChart = null;
+let reviewChart = null;
+
+const RANKING_COLORS = {
+  mvp: '#FFD700',
+  code: '#00D9FF',
+  community: '#FF6B6B',
+  review: '#4ECDC4',
+};
+
+function createRankingChart(elementId, data, color, valueKey = 'count', valueName = 'Count') {
+  const topData = data.slice(0, 15);
+
+  const options = {
+    series: [{
+      name: valueName,
+      data: topData.map(item => item[valueKey]),
+    }],
+    chart: {
+      type: 'bar',
+      height: 400,
+      toolbar: { show: false },
+      events: {
+        dataPointSelection: function(event, chartContext, config) {
+          const author = topData[config.dataPointIndex].author;
+          window.open(`https://github.com/${author}`, '_blank', 'noopener,noreferrer');
+        },
+      },
+    },
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        borderRadius: 4,
+        dataLabels: {
+          position: 'top',
+        },
+      },
+    },
+    dataLabels: {
+      enabled: true,
+      offsetX: 25,
+      style: {
+        fontSize: '12px',
+        colors: ['#333'],
+      },
+      formatter: function(val) {
+        return val;
+      },
+    },
+    xaxis: {
+      categories: topData.map(item => item.author),
+    },
+    yaxis: {
+      labels: {
+        style: {
+          fontSize: '11px',
+        },
+      },
+    },
+    colors: [color],
+    tooltip: {
+      y: {
+        formatter: function(val) {
+          return val;
+        },
+      },
+    },
+    grid: {
+      xaxis: {
+        lines: { show: true },
+      },
+      yaxis: {
+        lines: { show: false },
+      },
+    },
+  };
+
+  return new ApexCharts(document.querySelector(`#${elementId}`), options);
+}
+
+function updateRankingCharts(periodKey) {
+  const periodData = currentPeriodType === 'monthly'
+    ? rankingsData.monthly[periodKey]
+    : rankingsData.yearly[periodKey];
+
+  if (!periodData) {
+    console.log('No data for period:', periodKey);
+    return;
+  }
+
+  if (mvpChart) {
+    mvpChart.destroy();
+  }
+  mvpChart = createRankingChart('mvp-ranking-table', periodData.mvp || [], RANKING_COLORS.mvp, 'score', 'Score');
+  mvpChart.render();
+
+  if (codeChart) {
+    codeChart.destroy();
+  }
+  codeChart = createRankingChart('code-ranking-table', periodData.code || [], RANKING_COLORS.code);
+  codeChart.render();
+
+  if (communityChart) {
+    communityChart.destroy();
+  }
+  communityChart = createRankingChart('community-ranking-table', periodData.community || [], RANKING_COLORS.community);
+  communityChart.render();
+
+  if (reviewChart) {
+    reviewChart.destroy();
+  }
+  reviewChart = createRankingChart('review-ranking-table', periodData.review || [], RANKING_COLORS.review);
+  reviewChart.render();
+}
+
+function populatePeriodSelector() {
+  const select = document.getElementById('period-select');
+  select.innerHTML = '';
+
+  const periods = currentPeriodType === 'monthly'
+    ? Object.keys(rankingsData.monthly).sort().reverse()
+    : Object.keys(rankingsData.yearly).sort().reverse();
+
+  periods.forEach((period) => {
+    const option = document.createElement('option');
+    option.value = period;
+    option.textContent = period;
+    select.appendChild(option);
+  });
+
+  if (periods.length > 0) {
+    updateRankingCharts(periods[0]);
+  }
+}
+
+function setupRankingsUI() {
+  const btnMonthly = document.getElementById('btn-monthly');
+  const btnYearly = document.getElementById('btn-yearly');
+  const periodSelect = document.getElementById('period-select');
+  const updatedSpan = document.getElementById('rankings-updated');
+
+  if (rankingsData.last_updated) {
+    updatedSpan.textContent = `Last updated: ${formatDate(rankingsData.last_updated)}`;
+  }
+
+  btnMonthly.addEventListener('click', () => {
+    currentPeriodType = 'monthly';
+    btnMonthly.classList.remove('btn-outline-primary');
+    btnMonthly.classList.add('btn-primary');
+    btnYearly.classList.remove('btn-primary');
+    btnYearly.classList.add('btn-outline-primary');
+    populatePeriodSelector();
+  });
+
+  btnYearly.addEventListener('click', () => {
+    currentPeriodType = 'yearly';
+    btnYearly.classList.remove('btn-outline-primary');
+    btnYearly.classList.add('btn-primary');
+    btnMonthly.classList.remove('btn-primary');
+    btnMonthly.classList.add('btn-outline-primary');
+    populatePeriodSelector();
+  });
+
+  periodSelect.addEventListener('change', (e) => {
+    updateRankingCharts(e.target.value);
+  });
+
+  populatePeriodSelector();
+}
+
+fetch('rankings.json')
+  .then((res) => res.json())
+  .then((json) => {
+    rankingsData = json;
+    setupRankingsUI();
+  })
+  .catch((error) => {
+    console.log('Error loading rankings.json:', error);
+    document.getElementById('code-ranking-table').innerHTML =
+      '<p style="color: #666;">Rankings data not available</p>';
   });

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <title>Autoware Contributor Metrics</title>
@@ -29,13 +29,48 @@
         </a>
       </p>
 
-      <h2>GitHub Stars History</h2>
+      <h2>GitHub Star History</h2>
       <div id="stars-stats" style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;"></div>
       <div id="stars-chart"></div>
 
-      <h2>GitHub Contributors History</h2>
+      <h2>Contributor History</h2>
       <div id="contributors-stats" style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;"></div>
       <div id="contributors-chart"></div>
+
+      <h2>Contributor Rankings</h2>
+      <div style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+          <div class="btn-group" role="group">
+            <button type="button" class="btn btn-primary" id="btn-monthly">Monthly</button>
+            <button type="button" class="btn btn-outline-primary" id="btn-yearly">Yearly</button>
+          </div>
+          <select id="period-select" class="form-select" style="width: auto; min-width: 150px;"></select>
+          <span id="rankings-updated" style="color: #666; font-size: 14px;"></span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-lg-3 col-md-6 mb-4">
+          <h4>MVP</h4>
+          <p class="text-muted" style="font-size: 14px;">Combined rank across all categories (lower is better)</p>
+          <div id="mvp-ranking-table"></div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <h4>Best Committer</h4>
+          <p class="text-muted" style="font-size: 14px;">Ranked by number of merged PRs</p>
+          <div id="code-ranking-table"></div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <h4>Best Evangelist</h4>
+          <p class="text-muted" style="font-size: 14px;">Ranked by Issues/Discussions and comments</p>
+          <div id="community-ranking-table"></div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+          <h4>Best Reviewer</h4>
+          <p class="text-muted" style="font-size: 14px;">Ranked by PR reviews and comments (excluding self)</p>
+          <div id="review-ranking-table"></div>
+        </div>
+      </div>
     </div>
     <script src="./main.js"></script>
   </body>

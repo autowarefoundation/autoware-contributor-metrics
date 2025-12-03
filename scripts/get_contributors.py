@@ -141,6 +141,22 @@ class GitHubGraphQLClient:
         all_edges = []
         page_count = 0
 
+        # Add mergedAt and reviews field only for pullRequests (simplified to avoid query complexity limits)
+        pr_extra_fields = ""
+        if contributor_type == "pullRequests":
+            pr_extra_fields = """
+                            mergedAt
+                            reviews(first:100) {
+                                edges {
+                                    node {
+                                        author {
+                                            login
+                                        }
+                                        createdAt
+                                    }
+                                }
+                            }"""
+
         query = f"""
         query($cursor: String!, $repository: String!) {{
             repository(owner:"autowarefoundation", name:$repository) {{
@@ -163,7 +179,7 @@ class GitHubGraphQLClient:
                                         createdAt
                                     }}
                                 }}
-                            }}
+                            }}{pr_extra_fields}
                         }}
                     }}
                 }}
