@@ -3,16 +3,18 @@
 // =============================================================================
 
 const COLORS = {
-  stars: ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181'],
+  stars: [
+    '#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181',
+    '#A8E6CF', '#DDA0DD', '#87CEEB', '#F0E68C', '#E6E6FA', '#FFA07A',
+    '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8B500', '#7DCEA0',
+    '#F1948A', '#AED6F1', '#D7BDE2', '#A3E4D7', '#FAD7A0', '#D5DBDB',
+    '#ABEBC6', '#F9E79F',
+  ],
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
 };
 
-const STARS_KEY_REPOS = [
-  'autoware_stars_history',
-  'autoware_core_stars_history',
-  'autoware_universe_stars_history',
-  'autoware.privately-owned-vehicles_stars_history',
-];
+// Repository list - will be loaded from repositories.json
+let REPOSITORIES = [];
 
 // =============================================================================
 // Utility Functions
@@ -121,10 +123,12 @@ function renderStarsChart(json) {
     },
   ];
 
-  STARS_KEY_REPOS.forEach((repoKey) => {
+  // Add all 25 repositories
+  REPOSITORIES.forEach((repo) => {
+    const repoKey = `${repo}_stars_history`;
     if (json[repoKey]) {
       series.push({
-        name: repoKey.replace('_stars_history', ''),
+        name: repo,
         data: mapToChartData(json[repoKey], 'star_count'),
       });
     }
@@ -135,7 +139,18 @@ function renderStarsChart(json) {
     title: 'GitHub Star Growth Over Time',
     yAxisTitle: 'Number of Stars',
     colors: COLORS.stars,
+    showLegend: true,
   });
+
+  // Increase chart height for better visibility with many series
+  options.chart.height = 600;
+  options.legend = {
+    position: 'bottom',
+    horizontalAlign: 'center',
+    floating: false,
+    fontSize: '12px',
+    markers: { width: 10, height: 10 },
+  };
 
   new ApexCharts(document.querySelector('#stars-chart'), options).render();
 }
@@ -144,13 +159,27 @@ function renderStarsStats(json) {
   const latestEntry = getLastEntry(json.total_stars_history);
   const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
 
+  // Show total and top 10 repositories by star count
+  const topRepos = [
+    'autoware',
+    'autoware_universe',
+    'autoware_ai_perception',
+    'autoware_ai_planning',
+    'ros2_socketcan',
+    'autoware_core',
+    'autoware.privately-owned-vehicles',
+    'autoware-documentation',
+    'autoware_ai_utilities',
+    'autoware_ai_simulation',
+  ];
   const items = [{ label: 'Total Unique Stars', value: latestEntry?.star_count || 0 }];
 
-  STARS_KEY_REPOS.forEach((repoKey) => {
+  topRepos.forEach((repo) => {
+    const repoKey = `${repo}_stars_history`;
     const entry = getLastEntry(json[repoKey] || []);
     if (entry) {
       items.push({
-        label: repoKey.replace('_stars_history', ''),
+        label: repo,
         value: entry.star_count,
       });
     }
@@ -220,26 +249,244 @@ function renderContributorsStats(json) {
 // Initialize
 // =============================================================================
 
-fetch('stars_history.json')
+// Load repositories first, then load chart data
+fetch('repositories.json')
   .then((res) => res.json())
-  .then((json) => {
-    renderStarsChart(json);
-    renderStarsStats(json);
+  .then((repoData) => {
+    REPOSITORIES = repoData.repositories || [];
+    console.log(`Loaded ${REPOSITORIES.length} repositories`);
+
+    // Now load chart data
+    fetch('stars_history.json')
+      .then((res) => res.json())
+      .then((json) => {
+        renderStarsChart(json);
+        renderStarsStats(json);
+      })
+      .catch((error) => {
+        console.log('Error loading stars_history.json:', error);
+        showError('#stars-chart', 'Stars history data not available');
+      });
+
+    fetch('contributors_history.json')
+      .then((res) => res.json())
+      .then((json) => {
+        renderContributorsChart(json);
+        renderContributorsStats(json);
+      })
+      .catch((error) => {
+        console.log('Error loading contributors_history.json:', error);
+        showError('#contributors-chart', 'Contributor history data not available');
+      });
   })
   .catch((error) => {
-    console.log('Error loading stars_history.json:', error);
-    showError('#stars-chart', 'Stars history data not available');
+    console.log('Error loading repositories.json:', error);
+    // Fallback: try to load charts anyway (they may work without REPOSITORIES)
+    fetch('stars_history.json')
+      .then((res) => res.json())
+      .then((json) => {
+        renderStarsChart(json);
+        renderStarsStats(json);
+      })
+      .catch((err) => showError('#stars-chart', 'Stars history data not available'));
+
+    fetch('contributors_history.json')
+      .then((res) => res.json())
+      .then((json) => {
+        renderContributorsChart(json);
+        renderContributorsStats(json);
+      })
+      .catch((err) => showError('#contributors-chart', 'Contributor history data not available'));
   });
 
-fetch('contributors_history.json')
+// =============================================================================
+// Rankings Charts
+// =============================================================================
+
+let rankingsData = null;
+let currentPeriodType = 'monthly';
+let mvpChart = null;
+let codeChart = null;
+let communityChart = null;
+let reviewChart = null;
+
+const RANKING_COLORS = {
+  mvp: '#FFD700',
+  code: '#00D9FF',
+  community: '#FF6B6B',
+  review: '#4ECDC4',
+};
+
+function createRankingChart(elementId, data, color, valueKey = 'count', valueName = 'Count') {
+  const topData = data.slice(0, 15);
+
+  const options = {
+    series: [{
+      name: valueName,
+      data: topData.map(item => item[valueKey]),
+    }],
+    chart: {
+      type: 'bar',
+      height: 400,
+      toolbar: { show: false },
+      events: {
+        dataPointSelection: function(event, chartContext, config) {
+          const author = topData[config.dataPointIndex].author;
+          window.open(`https://github.com/${author}`, '_blank', 'noopener,noreferrer');
+        },
+      },
+    },
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        borderRadius: 4,
+        dataLabels: {
+          position: 'top',
+        },
+      },
+    },
+    dataLabels: {
+      enabled: true,
+      offsetX: 25,
+      style: {
+        fontSize: '12px',
+        colors: ['#333'],
+      },
+      formatter: function(val) {
+        return val;
+      },
+    },
+    xaxis: {
+      categories: topData.map(item => item.author),
+    },
+    yaxis: {
+      labels: {
+        style: {
+          fontSize: '11px',
+        },
+      },
+    },
+    colors: [color],
+    tooltip: {
+      y: {
+        formatter: function(val) {
+          return val;
+        },
+      },
+    },
+    grid: {
+      xaxis: {
+        lines: { show: true },
+      },
+      yaxis: {
+        lines: { show: false },
+      },
+    },
+  };
+
+  return new ApexCharts(document.querySelector(`#${elementId}`), options);
+}
+
+function updateRankingCharts(periodKey) {
+  const periodData = currentPeriodType === 'monthly'
+    ? rankingsData.monthly[periodKey]
+    : rankingsData.yearly[periodKey];
+
+  if (!periodData) {
+    console.log('No data for period:', periodKey);
+    return;
+  }
+
+  if (mvpChart) {
+    mvpChart.destroy();
+  }
+  mvpChart = createRankingChart('mvp-ranking-table', periodData.mvp || [], RANKING_COLORS.mvp, 'score', 'Score');
+  mvpChart.render();
+
+  if (codeChart) {
+    codeChart.destroy();
+  }
+  codeChart = createRankingChart('code-ranking-table', periodData.code || [], RANKING_COLORS.code);
+  codeChart.render();
+
+  if (communityChart) {
+    communityChart.destroy();
+  }
+  communityChart = createRankingChart('community-ranking-table', periodData.community || [], RANKING_COLORS.community);
+  communityChart.render();
+
+  if (reviewChart) {
+    reviewChart.destroy();
+  }
+  reviewChart = createRankingChart('review-ranking-table', periodData.review || [], RANKING_COLORS.review);
+  reviewChart.render();
+}
+
+function populatePeriodSelector() {
+  const select = document.getElementById('period-select');
+  select.innerHTML = '';
+
+  const periods = currentPeriodType === 'monthly'
+    ? Object.keys(rankingsData.monthly).sort().reverse()
+    : Object.keys(rankingsData.yearly).sort().reverse();
+
+  periods.forEach((period) => {
+    const option = document.createElement('option');
+    option.value = period;
+    option.textContent = period;
+    select.appendChild(option);
+  });
+
+  if (periods.length > 0) {
+    updateRankingCharts(periods[0]);
+  }
+}
+
+function setupRankingsUI() {
+  const btnMonthly = document.getElementById('btn-monthly');
+  const btnYearly = document.getElementById('btn-yearly');
+  const periodSelect = document.getElementById('period-select');
+  const updatedSpan = document.getElementById('rankings-updated');
+
+  if (rankingsData.last_updated) {
+    updatedSpan.textContent = `Last updated: ${formatDate(rankingsData.last_updated)}`;
+  }
+
+  btnMonthly.addEventListener('click', () => {
+    currentPeriodType = 'monthly';
+    btnMonthly.classList.remove('btn-outline-primary');
+    btnMonthly.classList.add('btn-primary');
+    btnYearly.classList.remove('btn-primary');
+    btnYearly.classList.add('btn-outline-primary');
+    populatePeriodSelector();
+  });
+
+  btnYearly.addEventListener('click', () => {
+    currentPeriodType = 'yearly';
+    btnYearly.classList.remove('btn-outline-primary');
+    btnYearly.classList.add('btn-primary');
+    btnMonthly.classList.remove('btn-primary');
+    btnMonthly.classList.add('btn-outline-primary');
+    populatePeriodSelector();
+  });
+
+  periodSelect.addEventListener('change', (e) => {
+    updateRankingCharts(e.target.value);
+  });
+
+  populatePeriodSelector();
+}
+
+fetch('rankings.json')
   .then((res) => res.json())
   .then((json) => {
-    renderContributorsChart(json);
-    renderContributorsStats(json);
+    rankingsData = json;
+    setupRankingsUI();
   })
   .catch((error) => {
-    console.log('Error loading contributors_history.json:', error);
-    showError('#contributors-chart', 'Contributor history data not available');
+    console.log('Error loading rankings.json:', error);
+    document.getElementById('code-ranking-table').innerHTML =
+      '<p style="color: #666;">Rankings data not available</p>';
   });
 
 // =============================================================================

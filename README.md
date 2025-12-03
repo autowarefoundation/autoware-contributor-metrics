@@ -30,11 +30,11 @@ Tracks the cumulative number of unique contributors over time.
 **Example:** If user B created a PR on Mar 1 and commented on an Issue on Feb 1, they appear in Total Contributors on Feb 1.
 
 **Target Repositories:**
-- autoware, autoware_core, autoware_universe, autoware_common
-- autoware_msgs, autoware_adapi_msgs, autoware_internal_msgs
-- autoware_cmake, autoware_utils, autoware_lanelet2_extension
-- autoware_launch, autoware-documentation, autoware_tools
-- And 10+ more Autoware Foundation repositories
+- Dynamically fetched from autowarefoundation organization via GitHub API
+- Top 25 by composite score (stars + forks)
+- Legacy autoware_ai repositories included for historical tracking
+
+**Note:** Archived repositories and repositories not updated within 2 years are excluded, except for legacy autoware_ai repositories.
 
 ### Contributor Rankings
 Monthly and yearly rankings for four categories:
@@ -47,8 +47,8 @@ Monthly and yearly rankings for four categories:
 | **Best Reviewer** | Reviews + Comments | PR reviews + PR comments (excluding self-reviews) |
 
 **MVP Calculation:**
+- Only contributors who appear in ALL THREE categories are eligible
 - Each contributor's rank in the three categories is summed
-- Contributors not appearing in a category receive rank = (last place + 1)
 - Ties are broken by total contribution count across all categories
 
 **Note**: Bot accounts (dependabot, github-actions, codecov, etc.) are excluded from rankings.
@@ -62,8 +62,14 @@ pip install -r requirements.txt
 
 2. Run the scripts
 ```bash
+# First, fetch and generate repository list
+python scripts/fetch_repositories.py --token <GitHubToken>
+
+# Then fetch contributor and stargazer data
 python scripts/get_contributors.py --token <GitHubToken>
 python scripts/get_stargazers.py --token <GitHubToken>
+
+# Process the data
 python scripts/calculate_contributor_history.py
 python scripts/calculate_stargazers_history.py
 python scripts/calculate_rankings.py
