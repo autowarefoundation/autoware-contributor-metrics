@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
+    inputs:
+      clear_cache:
+        description: 'Skip restoring cache'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   measure-contributors:
@@ -29,8 +35,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Set clear_cache flags on Mondays or if requested
+        id: check_cache
+        run: |
+          if [ "$(date +%u)" = "1" ] || [ "${{ github.event.inputs.clear_cache }}" = "true" ]; then
+            echo "clear_cache=true" >> $GITHUB_OUTPUT
+          else
+            echo "clear_cache=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Restore cache
         uses: actions/cache/restore@v4
+        if: steps.check_cache.outputs.clear_cache != 'true'
         with:
           path: cache/
           key: contributor-data-cache-${{ github.run_number }}
