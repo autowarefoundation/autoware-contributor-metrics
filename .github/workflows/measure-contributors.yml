@@ -5,8 +5,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 0 * * *'  # Daily at midnight
-    - cron: '0 0 * * 1'  # Weekly on Monday (clears cache)
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       clear_cache:
@@ -36,7 +35,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Check if cache should be cleared
+      - name: Set clear_cache flags on Mondays or if requested
         id: check_cache
         run: |
           if [ "$(date +%u)" = "1" ] || [ "${{ github.event.inputs.clear_cache }}" = "true" ]; then
