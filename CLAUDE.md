@@ -145,7 +145,7 @@ The workflow `.github/workflows/measure-contributors.yml`:
 
 ### Rate Limiting Strategy
 
-Both fetcher scripts implement sophisticated rate limiting:
+Both fetcher scripts implement rate limiting with identical logic (code is duplicated between `get_contributors.py` and `get_stargazers.py` — changes must be applied to both):
 - Check `X-RateLimit-Remaining` header before each request
 - Wait until rate limit reset if < 10 requests remaining
 - Exponential backoff on 403 errors (up to 5 retries)
@@ -158,38 +158,23 @@ Both fetcher scripts implement sophisticated rate limiting:
 
 ### Date Filtering
 
-Contributor history starts from January 1, 2022 (`ContributorHistory.start_date`). Earlier contributions are ignored.
+Contributor history starts from January 1, 2022 (`ContributorHistory.start_date` and `RankingCalculator.start_date`). Earlier contributions are silently ignored.
 
 ### Incremental Caching
 
 When using `--use-cache`, fetcher scripts:
 - Load existing cached data and extract the last cursor
-- Fetch only new data starting from that cursor
+- Fetch only new data starting from that cursor (GraphQL `after:` is exclusive, so no duplication)
 - Merge new data with cached data and save
 
-## File Structure
+### Bot Exclusion
 
-```
-.
-├── scripts/
-│   ├── fetch_repositories.py            # Fetch and filter repository list
-│   ├── repositories.py                  # Load repositories from JSON
-│   ├── get_contributors.py              # Fetch issues/PRs/discussions
-│   ├── get_stargazers.py                # Fetch stargazers
-│   ├── calculate_contributor_history.py # Process contributors
-│   ├── calculate_stargazers_history.py  # Process stargazers
-│   └── calculate_rankings.py            # Calculate contributor rankings
-├── public/
-│   ├── index.html                       # Dashboard HTML
-│   ├── main.js                          # Visualization logic
-│   └── repositories.json                # Repository list (generated)
-├── cache/                               # Raw API responses (gitignored)
-│   ├── raw_contributor_data/
-│   └── raw_stargazer_data/
-├── results/                             # Processed JSON (gitignored)
-│   ├── contributors_history.json
-│   ├── stars_history.json
-│   └── rankings.json
-├── requirements.txt
-└── README.md
-```
+`calculate_rankings.py` defines a `BOT_USERS` set of known bot accounts. The `_is_bot()` method also catches any login ending with `[bot]` as a catch-all. When adding new bots without the `[bot]` suffix, add them explicitly to `BOT_USERS`.
+
+### Non-obvious Behaviors
+
+- **Discussions are special-cased**: Only the `autoware` repo's discussions are fetched (hardcoded in `get_contributors.py`), not all repos.
+- **Comments/reviews capped at 100 per item**: GraphQL queries use `first:100` for comments and reviews — items with more will be truncated.
+- **`repositories.py` fails silently**: If `public/repositories.json` doesn't exist at import time, `REPOSITORIES` becomes an empty list with only a printed warning. Scripts will process zero repos.
+- **PR reviews not used in contributor history**: `calculate_contributor_history.py` ignores review data in the cache; reviews only flow into `calculate_rankings.py`.
+- **No test or lint infrastructure**: There are no tests, linters, or pre-commit hooks in this project.
