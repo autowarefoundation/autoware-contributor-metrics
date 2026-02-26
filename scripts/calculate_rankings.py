@@ -8,15 +8,19 @@ from repositories import REPOSITORIES
 # Bot users to exclude from rankings
 BOT_USERS = {
     "dependabot[bot]",
+    "dependabot",
     "github-actions[bot]",
     "github-actions",
     "renovate[bot]",
     "codecov[bot]",
     "codecov",
     "pre-commit-ci[bot]",
+    "pre-commit-ci",
     "mergify[bot]",
+    "mergify",
     "stale",
     "awf-autoware-bot",
+    "copilot-pull-request-reviewer",
 }
 
 

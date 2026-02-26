@@ -24,7 +24,8 @@
       "Bash(lsof:*)",
       "Bash(git log:*)",
       "Bash(git add:*)",
-      "Bash(git remote set-url:*)"
+      "Bash(git remote set-url:*)",
+      "Bash(gh run:*)"
     ],
     "deny": [],
     "ask": []
