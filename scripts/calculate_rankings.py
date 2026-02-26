@@ -21,6 +21,7 @@ BOT_USERS = {
     "stale",
     "awf-autoware-bot",
     "copilot-pull-request-reviewer",
+    "claude",
 }
 
 
