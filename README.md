@@ -1,7 +1,7 @@
 # Autoware Contributor Metrics
 
 ## Check the metrics
-Visit the following page: https://autowarefoundation.github.io/autoware-contributor-metrics/index.html
+Visit the following page: https://autowarefoundation.github.io/autoware-contributor-metrics
 
 ## Metrics Overview
 
