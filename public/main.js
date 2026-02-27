@@ -381,9 +381,7 @@ function createRankingChart(elementId, data, color, valueKey = 'count', valueNam
 }
 
 function updateRankingCharts(periodKey) {
-  const periodData = currentPeriodType === 'monthly'
-    ? rankingsData.monthly[periodKey]
-    : rankingsData.yearly[periodKey];
+  const periodData = rankingsData[currentPeriodType][periodKey];
 
   if (!periodData) {
     console.log('No data for period:', periodKey);
@@ -419,9 +417,7 @@ function populatePeriodSelector() {
   const select = document.getElementById('period-select');
   select.innerHTML = '';
 
-  const periods = currentPeriodType === 'monthly'
-    ? Object.keys(rankingsData.monthly).sort().reverse()
-    : Object.keys(rankingsData.yearly).sort().reverse();
+  const periods = Object.keys(rankingsData[currentPeriodType]).sort().reverse();
 
   periods.forEach((period) => {
     const option = document.createElement('option');
@@ -437,31 +433,30 @@ function populatePeriodSelector() {
 
 function setupRankingsUI() {
   const btnMonthly = document.getElementById('btn-monthly');
+  const btnQuarterly = document.getElementById('btn-quarterly');
   const btnYearly = document.getElementById('btn-yearly');
   const periodSelect = document.getElementById('period-select');
   const updatedSpan = document.getElementById('rankings-updated');
+  const allButtons = [btnMonthly, btnQuarterly, btnYearly];
 
   if (rankingsData.last_updated) {
     updatedSpan.textContent = `Last updated: ${formatDate(rankingsData.last_updated)}`;
   }
 
-  btnMonthly.addEventListener('click', () => {
-    currentPeriodType = 'monthly';
-    btnMonthly.classList.remove('btn-outline-primary');
-    btnMonthly.classList.add('btn-primary');
-    btnYearly.classList.remove('btn-primary');
-    btnYearly.classList.add('btn-outline-primary');
+  function activateButton(activeBtn, periodType) {
+    currentPeriodType = periodType;
+    allButtons.forEach(btn => {
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-outline-primary');
+    });
+    activeBtn.classList.remove('btn-outline-primary');
+    activeBtn.classList.add('btn-primary');
     populatePeriodSelector();
-  });
+  }
 
-  btnYearly.addEventListener('click', () => {
-    currentPeriodType = 'yearly';
-    btnYearly.classList.remove('btn-outline-primary');
-    btnYearly.classList.add('btn-primary');
-    btnMonthly.classList.remove('btn-primary');
-    btnMonthly.classList.add('btn-outline-primary');
-    populatePeriodSelector();
-  });
+  btnMonthly.addEventListener('click', () => activateButton(btnMonthly, 'monthly'));
+  btnQuarterly.addEventListener('click', () => activateButton(btnQuarterly, 'quarterly'));
+  btnYearly.addEventListener('click', () => activateButton(btnYearly, 'yearly'));
 
   periodSelect.addEventListener('change', (e) => {
     updateRankingCharts(e.target.value);

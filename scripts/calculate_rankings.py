@@ -43,6 +43,11 @@ class RankingCalculator:
         """Get year key in YYYY format"""
         return date.strftime('%Y')
 
+    def _get_quarter_key(self, date: datetime.datetime) -> str:
+        """Get quarter key in YYYY-QN format"""
+        quarter = (date.month - 1) // 3 + 1
+        return f"{date.strftime('%Y')}-Q{quarter}"
+
     def _is_bot(self, author: str) -> bool:
         """Check if the author is a bot"""
         return author in BOT_USERS or author.endswith("[bot]")
@@ -233,6 +238,29 @@ class RankingCalculator:
 
         return period_counts[:limit]
 
+    def _generate_quarterly_ranking(self, contributions: Dict, quarter_key: str, limit: int = 50) -> List[Dict]:
+        """Generate quarterly ranking by aggregating months in the quarter"""
+        # Parse quarter_key like "2024-Q1" -> year=2024, quarter=1
+        year_str, q_str = quarter_key.split('-Q')
+        quarter = int(q_str)
+        start_month = (quarter - 1) * 3 + 1
+        # Generate month keys for this quarter (e.g. Q1 -> 01, 02, 03)
+        quarter_month_keys = [f"{year_str}-{m:02d}" for m in range(start_month, start_month + 3)]
+
+        quarter_counts = defaultdict(int)
+        for author, months in contributions.items():
+            for month_key, count in months.items():
+                if month_key in quarter_month_keys:
+                    quarter_counts[author] += count
+
+        period_counts = [{"author": author, "count": count} for author, count in quarter_counts.items() if count > 0]
+        period_counts.sort(key=lambda x: (-x["count"], x["author"]))
+
+        for i, item in enumerate(period_counts[:limit], 1):
+            item["rank"] = i
+
+        return period_counts[:limit]
+
     def _calculate_mvp_ranking(self, code_ranking: List[Dict], community_ranking: List[Dict], review_ranking: List[Dict], limit: int = 50) -> List[Dict]:
         """Calculate MVP ranking based on combined ranks across all categories
 
@@ -277,10 +305,11 @@ class RankingCalculator:
         return mvp_scores[:limit]
 
     def generate_rankings(self) -> Dict:
-        """Generate all rankings (monthly and yearly)"""
-        # Get all unique months and years
+        """Generate all rankings (monthly, quarterly, and yearly)"""
+        # Get all unique months, quarters, and years
         all_months = set()
         all_years = set()
+        all_quarters = set()
 
         for contributions in [self.code_contributions, self.community_contributions, self.review_contributions]:
             for author_months in contributions.values():
@@ -288,6 +317,9 @@ class RankingCalculator:
 
         for month in all_months:
             all_years.add(month[:4])
+            # Derive quarter key from month key (e.g. "2024-03" -> "2024-Q1")
+            date = datetime.datetime.strptime(month, '%Y-%m')
+            all_quarters.add(self._get_quarter_key(date))
 
         # Generate monthly rankings
         monthly = {}
@@ -298,6 +330,21 @@ class RankingCalculator:
             mvp_ranking = self._calculate_mvp_ranking(code_ranking, community_ranking, review_ranking)
 
             monthly[month] = {
+                "code": code_ranking,
+                "community": community_ranking,
+                "review": review_ranking,
+                "mvp": mvp_ranking,
+            }
+
+        # Generate quarterly rankings
+        quarterly = {}
+        for quarter in sorted(all_quarters):
+            code_ranking = self._generate_quarterly_ranking(self.code_contributions, quarter)
+            community_ranking = self._generate_quarterly_ranking(self.community_contributions, quarter)
+            review_ranking = self._generate_quarterly_ranking(self.review_contributions, quarter)
+            mvp_ranking = self._calculate_mvp_ranking(code_ranking, community_ranking, review_ranking)
+
+            quarterly[quarter] = {
                 "code": code_ranking,
                 "community": community_ranking,
                 "review": review_ranking,
@@ -321,6 +368,7 @@ class RankingCalculator:
 
         return {
             "monthly": monthly,
+            "quarterly": quarterly,
             "yearly": yearly,
             "last_updated": datetime.datetime.now().strftime('%Y-%m-%d'),
         }
@@ -373,8 +421,10 @@ def main():
 
     # Print summary
     monthly_periods = len(rankings["monthly"])
+    quarterly_periods = len(rankings["quarterly"])
     yearly_periods = len(rankings["yearly"])
     print(f"Monthly periods: {monthly_periods}")
+    print(f"Quarterly periods: {quarterly_periods}")
     print(f"Yearly periods: {yearly_periods}")
 
     # Print latest month stats
