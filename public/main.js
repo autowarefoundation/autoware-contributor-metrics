@@ -36,6 +36,20 @@ function formatNumber(val) {
   return Math.round(val).toLocaleString();
 }
 
+function rankPrefix(rank) {
+  return rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `${rank}.`;
+}
+
+function getRepoStarsSorted(json) {
+  return REPOSITORIES
+    .filter(repo => json[`${repo}_stars_history`])
+    .map(repo => {
+      const lastEntry = getLastEntry(json[`${repo}_stars_history`]);
+      return { repo, starCount: lastEntry ? lastEntry.star_count : 0 };
+    })
+    .sort((a, b) => b.starCount - a.starCount);
+}
+
 function mapToChartData(dataArray, valueKey) {
   return dataArray.map((item) => [new Date(item.date), item[valueKey]]);
 }
@@ -123,15 +137,12 @@ function renderStarsChart(json) {
     },
   ];
 
-  // Add all 25 repositories
-  REPOSITORIES.forEach((repo) => {
-    const repoKey = `${repo}_stars_history`;
-    if (json[repoKey]) {
-      series.push({
-        name: repo,
-        data: mapToChartData(json[repoKey], 'star_count'),
-      });
-    }
+  // Add repositories sorted by latest star count (descending) with rank prefix
+  getRepoStarsSorted(json).forEach(({ repo }, index) => {
+    series.push({
+      name: `${rankPrefix(index + 1)} ${repo}`,
+      data: mapToChartData(json[`${repo}_stars_history`], 'star_count'),
+    });
   });
 
   const options = createChartOptions({
@@ -159,30 +170,11 @@ function renderStarsStats(json) {
   const latestEntry = getLastEntry(json.total_stars_history);
   const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
 
-  // Show total and top 10 repositories by star count
-  const topRepos = [
-    'autoware',
-    'autoware_universe',
-    'autoware_ai_perception',
-    'autoware_ai_planning',
-    'ros2_socketcan',
-    'autoware_core',
-    'autoware.privately-owned-vehicles',
-    'autoware-documentation',
-    'autoware_ai_utilities',
-    'autoware_ai_simulation',
-  ];
   const items = [{ label: 'Total Unique Stars', value: latestEntry?.star_count || 0 }];
 
-  topRepos.forEach((repo) => {
-    const repoKey = `${repo}_stars_history`;
-    const entry = getLastEntry(json[repoKey] || []);
-    if (entry) {
-      items.push({
-        label: repo,
-        value: entry.star_count,
-      });
-    }
+  // Show top 10 repositories sorted by star count
+  getRepoStarsSorted(json).slice(0, 10).forEach(({ repo, starCount }, index) => {
+    items.push({ label: `${rankPrefix(index + 1)} ${repo}`, value: starCount });
   });
 
   document.querySelector('#stars-stats').innerHTML = createStatsHtml(date, items, COLORS.stars);
