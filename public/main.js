@@ -174,7 +174,8 @@ function renderStarsStats(json) {
 
   // Show top 10 repositories sorted by star count
   getRepoStarsSorted(json).slice(0, 10).forEach(({ repo, starCount }, index) => {
-    items.push({ label: `${rankPrefix(index + 1)} ${repo}`, value: starCount });
+    const repoLink = `<a href="https://github.com/autowarefoundation/${repo}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">${repo}</a>`;
+    items.push({ label: `${rankPrefix(index + 1)} ${repoLink}`, value: starCount });
   });
 
   document.querySelector('#stars-stats').innerHTML = createStatsHtml(date, items, COLORS.stars);
