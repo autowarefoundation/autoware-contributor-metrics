@@ -2,83 +2,167 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Autoware Contributor Metrics</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Outfit:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <script
-      type="text/javascript"
-      src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"
-    ></script>
+
+    <!-- ApexCharts -->
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-      integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM"
-      crossorigin="anonymous"
-    />
+
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="style.css" />
+
+    <!-- Prevent FOUC: apply saved theme before render -->
+    <script>
+      (function() {
+        var p = localStorage.getItem('theme-preference') || 'system';
+        var t = p === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : p;
+        document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
+
+    <!-- ApexCharts global config (colors handled by CSS overrides) -->
+    <script>
+      window.Apex = {
+        chart: { background: 'transparent' },
+        tooltip: { theme: 'dark' },
+      };
+    </script>
   </head>
   <body>
-    <div class="container">
-      <h1>Autoware Contributor Metrics</h1>
-
-      <p>
-        <a href="https://github.com/autowarefoundation/autoware-contributor-metrics">
-          https://github.com/autowarefoundation/autoware-contributor-metrics
-        </a>
-      </p>
-
-      <nav style="margin-bottom: 20px;">
-        <a href="#stars" class="btn btn-outline-secondary btn-sm">GitHub Star History</a>
-        <a href="#contributors" class="btn btn-outline-secondary btn-sm">Contributor History</a>
-        <a href="#rankings" class="btn btn-outline-secondary btn-sm">Contributor Rankings</a>
-      </nav>
-
-      <h2 id="stars">GitHub Star History</h2>
-      <div id="stars-stats" style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;"></div>
-      <div id="stars-chart"></div>
-
-      <h2 id="contributors">Contributor History</h2>
-      <div id="contributors-stats" style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;"></div>
-      <div id="contributors-chart"></div>
-
-      <h2 id="rankings">Contributor Rankings</h2>
-      <div style="margin-bottom: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
-        <div class="d-flex align-items-center gap-3 flex-wrap">
-          <div class="btn-group" role="group">
-            <button type="button" class="btn btn-primary" id="btn-monthly">Monthly</button>
-            <button type="button" class="btn btn-outline-primary" id="btn-quarterly">Quarterly</button>
-            <button type="button" class="btn btn-outline-primary" id="btn-yearly">Yearly</button>
+    <!-- Header -->
+    <header class="site-header">
+      <div class="dashboard-container">
+        <div class="header-inner">
+          <h1 class="header-title"><span>Autoware</span> Contributor Metrics</h1>
+          <div class="header-links">
+            <a
+              href="https://github.com/autowarefoundation/autoware-contributor-metrics"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="github-badge"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+              </svg>
+              GitHub
+            </a>
+            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle theme"></button>
           </div>
-          <select id="period-select" class="form-select" style="width: auto; min-width: 150px;"></select>
-          <span id="rankings-updated" style="color: #666; font-size: 14px;"></span>
         </div>
       </div>
+    </header>
 
-      <div class="row">
-        <div class="col-lg-3 col-md-6 mb-4">
-          <h4>MVP</h4>
-          <p class="text-muted" style="font-size: 14px;">Combined rank across all categories (lower is better)</p>
-          <div id="mvp-ranking-table"></div>
-        </div>
-        <div class="col-lg-3 col-md-6 mb-4">
-          <h4>Best Committer</h4>
-          <p class="text-muted" style="font-size: 14px;">Ranked by number of merged PRs</p>
-          <div id="code-ranking-table"></div>
-        </div>
-        <div class="col-lg-3 col-md-6 mb-4">
-          <h4>Best Evangelist</h4>
-          <p class="text-muted" style="font-size: 14px;">Ranked by Issues/Discussions and comments</p>
-          <div id="community-ranking-table"></div>
-        </div>
-        <div class="col-lg-3 col-md-6 mb-4">
-          <h4>Best Reviewer</h4>
-          <p class="text-muted" style="font-size: 14px;">Ranked by PR reviews and comments (excluding self)</p>
-          <div id="review-ranking-table"></div>
+    <!-- Sticky Nav -->
+    <nav class="sticky-nav">
+      <div class="dashboard-container">
+        <div class="nav-inner">
+          <a href="#stars" class="nav-link active" data-section="stars">Stars</a>
+          <a href="#contributors" class="nav-link" data-section="contributors">Contributors</a>
+          <a href="#rankings" class="nav-link" data-section="rankings">Rankings</a>
         </div>
       </div>
-    </div>
+    </nav>
+
+    <main class="dashboard-container">
+      <!-- Stars Section -->
+      <section id="stars" class="dashboard-section" data-section>
+        <h2 class="section-heading">GitHub Star History</h2>
+        <div id="stars-stats" class="stats-grid">
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+        </div>
+        <div id="stars-chart" class="chart-wrapper">
+          <div class="skeleton skeleton-chart"></div>
+        </div>
+      </section>
+
+      <!-- Contributors Section -->
+      <section id="contributors" class="dashboard-section" data-section>
+        <h2 class="section-heading">Contributor History</h2>
+        <div id="contributors-stats" class="stats-grid">
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+        </div>
+        <div id="contributors-chart" class="chart-wrapper">
+          <div class="skeleton skeleton-chart"></div>
+        </div>
+      </section>
+
+      <!-- Rankings Section -->
+      <section id="rankings" class="dashboard-section" data-section>
+        <h2 class="section-heading">Contributor Rankings</h2>
+
+        <div class="rankings-controls">
+          <div class="pill-group">
+            <button type="button" class="pill-btn active" id="btn-monthly">Monthly</button>
+            <button type="button" class="pill-btn" id="btn-quarterly">Quarterly</button>
+            <button type="button" class="pill-btn" id="btn-yearly">Yearly</button>
+          </div>
+          <select id="period-select" class="period-select"></select>
+          <span id="rankings-updated" class="rankings-updated"></span>
+        </div>
+
+        <!-- Mobile tabs -->
+        <div class="ranking-tabs">
+          <div class="ranking-tab-group">
+            <button type="button" class="ranking-tab-btn active" data-tab="mvp">MVP</button>
+            <button type="button" class="ranking-tab-btn" data-tab="code">Committer</button>
+            <button type="button" class="ranking-tab-btn" data-tab="community">Evangelist</button>
+            <button type="button" class="ranking-tab-btn" data-tab="review">Reviewer</button>
+          </div>
+        </div>
+
+        <div class="rankings-grid">
+          <div class="ranking-column active-tab" data-ranking="mvp">
+            <h3 class="ranking-column-title">MVP</h3>
+            <p class="ranking-column-desc">Combined rank across all categories</p>
+            <div class="ranking-chart-container" id="mvp-ranking-table"></div>
+          </div>
+          <div class="ranking-column" data-ranking="code">
+            <h3 class="ranking-column-title">Best Committer</h3>
+            <p class="ranking-column-desc">Ranked by merged PRs</p>
+            <div class="ranking-chart-container" id="code-ranking-table"></div>
+          </div>
+          <div class="ranking-column" data-ranking="community">
+            <h3 class="ranking-column-title">Best Evangelist</h3>
+            <p class="ranking-column-desc">Issues, discussions &amp; comments</p>
+            <div class="ranking-chart-container" id="community-ranking-table"></div>
+          </div>
+          <div class="ranking-column" data-ranking="review">
+            <h3 class="ranking-column-title">Best Reviewer</h3>
+            <p class="ranking-column-desc">PR reviews &amp; comments (excl. self)</p>
+            <div class="ranking-chart-container" id="review-ranking-table"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div class="dashboard-container">
+        <p>
+          <a
+            href="https://github.com/autowarefoundation/autoware-contributor-metrics"
+            target="_blank"
+            rel="noopener noreferrer"
+          >autoware-contributor-metrics</a>
+          &middot; Autoware Foundation
+        </p>
+      </div>
+    </footer>
+
     <script src="./main.js"></script>
   </body>
 </html>
