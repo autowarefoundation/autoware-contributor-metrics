@@ -1,9 +1,9 @@
-import json
 import datetime
 from typing import Dict, List, Tuple
 from collections import defaultdict
 from pathlib import Path
 from repositories import REPOSITORIES
+from utils import parse_github_datetime, load_json_file, generate_cumulative_history, write_json_output
 
 
 class StarsHistoryAnalyzer:
@@ -19,10 +19,11 @@ class StarsHistoryAnalyzer:
                 username = edge.get("node", {}).get("login") if edge.get("node") else None
 
                 if starred_at and username:
-                    d = datetime.datetime.strptime(starred_at, '%Y-%m-%dT%H:%M:%SZ')
-                    day = datetime.date(d.year, d.month, d.day)
-                    stargazers_info.append((username, day))
-            except (ValueError, KeyError) as e:
+                    d = parse_github_datetime(starred_at)
+                    if d:
+                        day = datetime.date(d.year, d.month, d.day)
+                        stargazers_info.append((username, day))
+            except (ValueError, KeyError):
                 continue
 
         return stargazers_info
@@ -36,61 +37,6 @@ class StarsHistoryAnalyzer:
 
         return dict(stars_per_day)
 
-    def generate_cumulative_history(self, stars_per_day: Dict[datetime.date, int]) -> List[Dict]:
-        """Generate cumulative star count history"""
-        # Create a list of all dates
-        all_dates = sorted(stars_per_day.keys())
-
-        # Calculate cumulative counts
-        cumulative_data = []
-        cumulative_count = 0
-
-        for date in all_dates:
-            cumulative_count += stars_per_day[date]
-            cumulative_data.append({
-                "date": date.strftime('%Y-%m-%d'),
-                "star_count": cumulative_count
-            })
-
-        return cumulative_data
-
-    def load_stargazers_from_file(self, file_path: str) -> List[Dict]:
-        """Load stargazers data from JSON file"""
-        try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-
-            # Handle different JSON structures
-            if isinstance(data, list):
-                return data
-            else:
-                print(f"Warning: Unexpected format in {file_path}")
-                return []
-
-        except FileNotFoundError:
-            print(f"Warning: File not found: {file_path}")
-            return []
-        except json.JSONDecodeError:
-            print(f"Warning: Invalid JSON in file: {file_path}")
-            return []
-
-    def merge_star_histories(self, all_histories: List[Dict]) -> Dict[datetime.date, int]:
-        """Merge multiple star histories into a total history"""
-        total_stars_per_day = defaultdict(int)
-
-        for history_data in all_histories:
-            for entry in history_data:
-                date_str = entry.get("date")
-                star_count = entry.get("star_count", 0)
-
-                try:
-                    date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
-                    total_stars_per_day[date] += star_count
-                except (ValueError, AttributeError):
-                    continue
-
-        return dict(total_stars_per_day)
-
     def generate_total_history(self, all_stargazers: List[List[Tuple[str, datetime.date]]]) -> List[Dict]:
         """Generate cumulative total star history from all repositories, counting unique stargazers"""
         # Collect all unique stargazers across all repositories
@@ -99,7 +45,6 @@ class StarsHistoryAnalyzer:
 
         for stargazers_info in all_stargazers:
             for username, day in stargazers_info:
-                # Track the earliest star date for each unique username
                 if username not in unique_stargazers or unique_stargazers[username] > day:
                     unique_stargazers[username] = day
 
@@ -108,20 +53,7 @@ class StarsHistoryAnalyzer:
         for username, day in unique_stargazers.items():
             stars_per_day[day] += 1
 
-        # Generate cumulative history
-        all_dates = sorted(stars_per_day.keys())
-        cumulative_data = []
-        cumulative_count = 0
-
-        for date in all_dates:
-            new_stars = stars_per_day[date]
-            cumulative_count += new_stars
-            cumulative_data.append({
-                "date": date.strftime('%Y-%m-%d'),
-                "star_count": cumulative_count
-            })
-
-        return cumulative_data
+        return generate_cumulative_history(dict(stars_per_day), "star_count")
 
 
 def main():
@@ -133,16 +65,14 @@ def main():
     repositories = REPOSITORIES
 
     # Process each repository
-    all_histories = []
     all_stargazers_info = []  # Raw stargazer data for unique counting
     output_data = {}
 
     for repository in repositories:
-        raw_data_path = Path("cache/raw_stargazer_data")
-        file_path = raw_data_path / f"{repository}_stargazers.json"
+        file_path = Path("cache/raw_stargazer_data") / f"{repository}_stargazers.json"
 
         print(f"Processing {repository}...")
-        stargazers_data = analyzer.load_stargazers_from_file(str(file_path))
+        stargazers_data = load_json_file(str(file_path))
 
         if not stargazers_data:
             continue
@@ -153,10 +83,9 @@ def main():
 
         # Generate per-repository history
         stars_per_day = analyzer.count_stars_per_day(stargazers_info)
-        history = analyzer.generate_cumulative_history(stars_per_day)
+        history = generate_cumulative_history(stars_per_day, "star_count")
 
         output_data[f"{repository}_stars_history"] = history
-        all_histories.append(history)
 
     # Generate total stars history with unique stargazers
     print("Generating total stars history (counting unique stargazers)...")
@@ -169,13 +98,8 @@ def main():
         for username, _ in stargazers_info
     ))
 
-    # Write to file
-    output_path = Path("results")
-    output_path.mkdir(exist_ok=True, parents=True)
-
-    output_file = output_path / "stars_history.json"
-    with open(output_file, 'w') as f:
-        json.dump(output_data, f, indent=2)
+    output_file = "results/stars_history.json"
+    write_json_output(output_data, output_file)
 
     print(f"\nDone! Generated {output_file}")
     print(f"Processed {len(repositories)} repositories")

@@ -1,9 +1,9 @@
-import json
 import datetime
-from typing import Dict, List
+from typing import Dict, List, Set
 from pathlib import Path
 from collections import defaultdict
 from repositories import REPOSITORIES
+from utils import parse_github_datetime, load_json_file, write_json_output
 
 # Bot users to exclude from rankings
 BOT_USERS = {
@@ -36,258 +36,149 @@ class RankingCalculator:
         self.review_contributions = defaultdict(lambda: defaultdict(int))
 
     def _get_month_key(self, date: datetime.datetime) -> str:
-        """Get month key in YYYY-MM format"""
         return date.strftime('%Y-%m')
 
-    def _get_year_key(self, date: datetime.datetime) -> str:
-        """Get year key in YYYY format"""
-        return date.strftime('%Y')
-
     def _get_quarter_key(self, date: datetime.datetime) -> str:
-        """Get quarter key in YYYY-QN format"""
         quarter = (date.month - 1) // 3 + 1
         return f"{date.strftime('%Y')}-Q{quarter}"
 
     def _is_bot(self, author: str) -> bool:
-        """Check if the author is a bot"""
         return author in BOT_USERS or author.endswith("[bot]")
 
-    def _parse_date(self, date_str: str) -> datetime.datetime:
-        """Parse ISO format date string"""
-        try:
-            return datetime.datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%SZ')
-        except (ValueError, TypeError):
-            return None
+    def _load_edges(self, file_path: str) -> List[Dict]:
+        """Load JSON and return the edge list."""
+        data = load_json_file(file_path)
+        if not data:
+            return []
+        return data if isinstance(data, list) else data.get("data", [])
 
-    def process_prs(self, file_path: str) -> None:
-        """Process PR file for code contributions (merged PR count per author)"""
-        try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
+    def _record_contribution(self, author: str, date_str: str, target: Dict) -> None:
+        """Parse date, check start_date and bots, record into target contributions dict."""
+        if not author or not date_str or self._is_bot(author):
+            return
+        date = parse_github_datetime(date_str)
+        if date and date >= self.start_date:
+            month_key = self._get_month_key(date)
+            target[author][month_key] += 1
 
-            edges = data if isinstance(data, list) else data.get("data", [])
+    def _process_comments(self, node: Dict, target: Dict, exclude_author: str = None) -> None:
+        """Iterate comment edges and record each into target."""
+        if "comments" not in node or "edges" not in node["comments"]:
+            return
+        for comment_edge in node["comments"]["edges"]:
+            comment_node = comment_edge.get("node")
+            if not comment_node or not comment_node.get("author"):
+                continue
+            author = comment_node["author"].get("login")
+            if exclude_author and author == exclude_author:
+                continue
+            self._record_contribution(author, comment_node.get("createdAt"), target)
 
-            for edge in edges:
-                if not isinstance(edge, dict) or "node" not in edge:
-                    continue
+    def process_prs_and_reviews(self, file_path: str) -> None:
+        """Process PR file for both code contributions and review contributions in one pass."""
+        for edge in self._load_edges(file_path):
+            if not isinstance(edge, dict) or "node" not in edge:
+                continue
 
-                node = edge["node"]
-                if node.get("author") is None:
-                    continue
+            node = edge["node"]
+            if node.get("author") is None:
+                continue
 
-                # Only count merged PRs
-                merged_at = node.get("mergedAt")
-                if not merged_at:
-                    continue
+            pr_author = node["author"].get("login")
 
-                author = node["author"].get("login")
+            # Code contributions: count merged PRs
+            merged_at = node.get("mergedAt")
+            if merged_at:
+                self._record_contribution(pr_author, merged_at, self.code_contributions)
 
-                if not author or self._is_bot(author):
-                    continue
+            # Review contributions: PR comments (excluding self)
+            self._process_comments(node, self.review_contributions, exclude_author=pr_author)
 
-                # Use mergedAt date for ranking
-                date = self._parse_date(merged_at)
-                if date and date >= self.start_date:
-                    month_key = self._get_month_key(date)
-                    self.code_contributions[author][month_key] += 1
-
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Warning: Could not process {file_path}: {e}")
+            # Review contributions: reviews (excluding self)
+            if "reviews" in node and "edges" in node["reviews"]:
+                for review_edge in node["reviews"]["edges"]:
+                    review_node = review_edge.get("node")
+                    if not review_node or not review_node.get("author"):
+                        continue
+                    author = review_node["author"].get("login")
+                    if author == pr_author:
+                        continue
+                    self._record_contribution(author, review_node.get("createdAt"), self.review_contributions)
 
     def process_issues_discussions(self, file_path: str) -> None:
         """Process issue/discussion file for community contributions (post + comment count)"""
-        try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
+        for edge in self._load_edges(file_path):
+            if not isinstance(edge, dict) or "node" not in edge:
+                continue
 
-            edges = data if isinstance(data, list) else data.get("data", [])
+            node = edge["node"]
 
-            for edge in edges:
-                if not isinstance(edge, dict) or "node" not in edge:
-                    continue
+            # Count Issue/Discussion author (post creator)
+            if node.get("author"):
+                author = node["author"].get("login")
+                self._record_contribution(author, node.get("createdAt"), self.community_contributions)
 
-                node = edge["node"]
+            # Count comments
+            self._process_comments(node, self.community_contributions)
 
-                # Count Issue/Discussion author (post creator)
-                if node.get("author"):
-                    author = node["author"].get("login")
-                    created_at = node.get("createdAt")
+    def _get_month_keys_for_period(self, period_key: str) -> Set[str]:
+        """Convert any period format to a set of month keys.
 
-                    if author and created_at and not self._is_bot(author):
-                        date = self._parse_date(created_at)
-                        if date and date >= self.start_date:
-                            month_key = self._get_month_key(date)
-                            self.community_contributions[author][month_key] += 1
+        "2024-03" -> {"2024-03"}
+        "2024-Q1" -> {"2024-01", "2024-02", "2024-03"}
+        "2024"    -> {"2024-01", ..., "2024-12"}
+        """
+        if "-Q" in period_key:
+            year_str, q_str = period_key.split('-Q')
+            quarter = int(q_str)
+            start_month = (quarter - 1) * 3 + 1
+            return {f"{year_str}-{m:02d}" for m in range(start_month, start_month + 3)}
+        elif len(period_key) == 4:
+            # Yearly
+            return {f"{period_key}-{m:02d}" for m in range(1, 13)}
+        else:
+            # Monthly
+            return {period_key}
 
-                # Count comments
-                if "comments" in node and "edges" in node["comments"]:
-                    for comment_edge in node["comments"]["edges"]:
-                        comment_node = comment_edge.get("node")
-                        if not comment_node or not comment_node.get("author"):
-                            continue
+    def _generate_ranking_for_period(self, contributions: Dict, period_key: str, limit: int = 50) -> List[Dict]:
+        """Generate ranking for any period type (month, quarter, year)."""
+        month_keys = self._get_month_keys_for_period(period_key)
 
-                        author = comment_node["author"].get("login")
-                        created_at = comment_node.get("createdAt")
-
-                        if not author or not created_at or self._is_bot(author):
-                            continue
-
-                        date = self._parse_date(created_at)
-                        if date and date >= self.start_date:
-                            month_key = self._get_month_key(date)
-                            self.community_contributions[author][month_key] += 1
-
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Warning: Could not process {file_path}: {e}")
-
-    def process_reviews(self, file_path: str) -> None:
-        """Process PR file for review contributions (PR comments + reviews, excluding self)"""
-        try:
-            with open(file_path, 'r') as f:
-                data = json.load(f)
-
-            edges = data if isinstance(data, list) else data.get("data", [])
-
-            for edge in edges:
-                if not isinstance(edge, dict) or "node" not in edge:
-                    continue
-
-                node = edge["node"]
-
-                # Get PR author to exclude self-reviews/comments
-                pr_author = None
-                if node.get("author"):
-                    pr_author = node["author"].get("login")
-
-                # Count PR comments (Conversation tab) - exclude self-comments
-                if "comments" in node and "edges" in node["comments"]:
-                    for comment_edge in node["comments"]["edges"]:
-                        comment_node = comment_edge.get("node")
-                        if not comment_node or not comment_node.get("author"):
-                            continue
-
-                        author = comment_node["author"].get("login")
-                        created_at = comment_node.get("createdAt")
-
-                        # Exclude self-comments and bots
-                        if not author or not created_at or self._is_bot(author):
-                            continue
-                        if author == pr_author:
-                            continue
-
-                        date = self._parse_date(created_at)
-                        if date and date >= self.start_date:
-                            month_key = self._get_month_key(date)
-                            self.review_contributions[author][month_key] += 1
-
-                # Count reviews - exclude self-reviews
-                if "reviews" in node and "edges" in node["reviews"]:
-                    for review_edge in node["reviews"]["edges"]:
-                        review_node = review_edge.get("node")
-                        if not review_node:
-                            continue
-
-                        if review_node.get("author"):
-                            author = review_node["author"].get("login")
-                            created_at = review_node.get("createdAt")
-
-                            # Exclude self-reviews and bots
-                            if not author or not created_at or self._is_bot(author):
-                                continue
-                            if author == pr_author:
-                                continue
-
-                            date = self._parse_date(created_at)
-                            if date and date >= self.start_date:
-                                month_key = self._get_month_key(date)
-                                self.review_contributions[author][month_key] += 1
-
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Warning: Could not process {file_path}: {e}")
-
-    def _generate_ranking(self, contributions: Dict, period_key: str, limit: int = 50) -> List[Dict]:
-        """Generate ranking for a specific period"""
-        period_counts = []
+        period_counts = {}
         for author, months in contributions.items():
-            count = months.get(period_key, 0)
-            if count > 0:
-                period_counts.append({"author": author, "count": count})
+            total = sum(months.get(mk, 0) for mk in month_keys)
+            if total > 0:
+                period_counts[author] = total
 
-        # Sort by count descending
-        period_counts.sort(key=lambda x: (-x["count"], x["author"]))
+        ranked = [{"author": a, "count": c} for a, c in period_counts.items()]
+        ranked.sort(key=lambda x: (-x["count"], x["author"]))
 
-        # Add rank
-        for i, item in enumerate(period_counts[:limit], 1):
+        for i, item in enumerate(ranked[:limit], 1):
             item["rank"] = i
 
-        return period_counts[:limit]
-
-    def _generate_yearly_ranking(self, contributions: Dict, year: str, limit: int = 50) -> List[Dict]:
-        """Generate yearly ranking by aggregating all months in the year"""
-        year_counts = defaultdict(int)
-        for author, months in contributions.items():
-            for month_key, count in months.items():
-                if month_key.startswith(year):
-                    year_counts[author] += count
-
-        period_counts = [{"author": author, "count": count} for author, count in year_counts.items() if count > 0]
-        period_counts.sort(key=lambda x: (-x["count"], x["author"]))
-
-        for i, item in enumerate(period_counts[:limit], 1):
-            item["rank"] = i
-
-        return period_counts[:limit]
-
-    def _generate_quarterly_ranking(self, contributions: Dict, quarter_key: str, limit: int = 50) -> List[Dict]:
-        """Generate quarterly ranking by aggregating months in the quarter"""
-        # Parse quarter_key like "2024-Q1" -> year=2024, quarter=1
-        year_str, q_str = quarter_key.split('-Q')
-        quarter = int(q_str)
-        start_month = (quarter - 1) * 3 + 1
-        # Generate month keys for this quarter (e.g. Q1 -> 01, 02, 03)
-        quarter_month_keys = [f"{year_str}-{m:02d}" for m in range(start_month, start_month + 3)]
-
-        quarter_counts = defaultdict(int)
-        for author, months in contributions.items():
-            for month_key, count in months.items():
-                if month_key in quarter_month_keys:
-                    quarter_counts[author] += count
-
-        period_counts = [{"author": author, "count": count} for author, count in quarter_counts.items() if count > 0]
-        period_counts.sort(key=lambda x: (-x["count"], x["author"]))
-
-        for i, item in enumerate(period_counts[:limit], 1):
-            item["rank"] = i
-
-        return period_counts[:limit]
+        return ranked[:limit]
 
     def _calculate_mvp_ranking(self, code_ranking: List[Dict], community_ranking: List[Dict], review_ranking: List[Dict], limit: int = 50) -> List[Dict]:
-        """Calculate MVP ranking based on combined ranks across all categories
+        """Calculate MVP ranking based on combined ranks across all categories.
 
         Only includes authors who appear in ALL THREE categories.
         """
-        # Create rank lookup dictionaries
         code_ranks = {item["author"]: item["rank"] for item in code_ranking}
         community_ranks = {item["author"]: item["rank"] for item in community_ranking}
         review_ranks = {item["author"]: item["rank"] for item in review_ranking}
 
+        # Build count dicts for O(1) tiebreaker lookup
+        code_counts = {item["author"]: item["count"] for item in code_ranking}
+        community_counts = {item["author"]: item["count"] for item in community_ranking}
+        review_counts = {item["author"]: item["count"] for item in review_ranking}
+
         # Get authors who appear in ALL three categories
         all_authors = set(code_ranks.keys()) & set(community_ranks.keys()) & set(review_ranks.keys())
 
-        # Calculate combined score for each author
         mvp_scores = []
         for author in all_authors:
-            code_rank = code_ranks[author]
-            community_rank = community_ranks[author]
-            review_rank = review_ranks[author]
-
-            total_rank = code_rank + community_rank + review_rank
-
-            # Get actual counts for tiebreaker
-            code_count = next((item["count"] for item in code_ranking if item["author"] == author), 0)
-            community_count = next((item["count"] for item in community_ranking if item["author"] == author), 0)
-            review_count = next((item["count"] for item in review_ranking if item["author"] == author), 0)
-            total_count = code_count + community_count + review_count
+            total_rank = code_ranks[author] + community_ranks[author] + review_ranks[author]
+            total_count = code_counts[author] + community_counts[author] + review_counts[author]
 
             mvp_scores.append({
                 "author": author,
@@ -298,7 +189,6 @@ class RankingCalculator:
         # Sort by score (ascending), then by total count (descending) for tiebreaker
         mvp_scores.sort(key=lambda x: (x["score"], -x["count"], x["author"]))
 
-        # Add rank and limit
         for i, item in enumerate(mvp_scores[:limit], 1):
             item["rank"] = i
 
@@ -306,72 +196,46 @@ class RankingCalculator:
 
     def generate_rankings(self) -> Dict:
         """Generate all rankings (monthly, quarterly, and yearly)"""
-        # Get all unique months, quarters, and years
+        # Collect all unique months
         all_months = set()
-        all_years = set()
-        all_quarters = set()
-
         for contributions in [self.code_contributions, self.community_contributions, self.review_contributions]:
             for author_months in contributions.values():
                 all_months.update(author_months.keys())
 
+        # Derive quarters and years from months
+        all_quarters = set()
+        all_years = set()
         for month in all_months:
             all_years.add(month[:4])
-            # Derive quarter key from month key (e.g. "2024-03" -> "2024-Q1")
             date = datetime.datetime.strptime(month, '%Y-%m')
             all_quarters.add(self._get_quarter_key(date))
 
-        # Generate monthly rankings
-        monthly = {}
-        for month in sorted(all_months):
-            code_ranking = self._generate_ranking(self.code_contributions, month)
-            community_ranking = self._generate_ranking(self.community_contributions, month)
-            review_ranking = self._generate_ranking(self.review_contributions, month)
-            mvp_ranking = self._calculate_mvp_ranking(code_ranking, community_ranking, review_ranking)
-
-            monthly[month] = {
-                "code": code_ranking,
-                "community": community_ranking,
-                "review": review_ranking,
-                "mvp": mvp_ranking,
-            }
-
-        # Generate quarterly rankings
-        quarterly = {}
-        for quarter in sorted(all_quarters):
-            code_ranking = self._generate_quarterly_ranking(self.code_contributions, quarter)
-            community_ranking = self._generate_quarterly_ranking(self.community_contributions, quarter)
-            review_ranking = self._generate_quarterly_ranking(self.review_contributions, quarter)
-            mvp_ranking = self._calculate_mvp_ranking(code_ranking, community_ranking, review_ranking)
-
-            quarterly[quarter] = {
-                "code": code_ranking,
-                "community": community_ranking,
-                "review": review_ranking,
-                "mvp": mvp_ranking,
-            }
-
-        # Generate yearly rankings
-        yearly = {}
-        for year in sorted(all_years):
-            code_ranking = self._generate_yearly_ranking(self.code_contributions, year)
-            community_ranking = self._generate_yearly_ranking(self.community_contributions, year)
-            review_ranking = self._generate_yearly_ranking(self.review_contributions, year)
-            mvp_ranking = self._calculate_mvp_ranking(code_ranking, community_ranking, review_ranking)
-
-            yearly[year] = {
-                "code": code_ranking,
-                "community": community_ranking,
-                "review": review_ranking,
-                "mvp": mvp_ranking,
-            }
-
-        return {
-            "monthly": monthly,
-            "quarterly": quarterly,
-            "yearly": yearly,
-            "last_updated": datetime.datetime.now().strftime('%Y-%m-%d'),
+        # Build period_types: {type_name: sorted list of period keys}
+        period_types = {
+            "monthly": sorted(all_months),
+            "quarterly": sorted(all_quarters),
+            "yearly": sorted(all_years),
         }
+
+        result = {}
+        for period_type, period_keys in period_types.items():
+            rankings = {}
+            for period_key in period_keys:
+                code_ranking = self._generate_ranking_for_period(self.code_contributions, period_key)
+                community_ranking = self._generate_ranking_for_period(self.community_contributions, period_key)
+                review_ranking = self._generate_ranking_for_period(self.review_contributions, period_key)
+                mvp_ranking = self._calculate_mvp_ranking(code_ranking, community_ranking, review_ranking)
+
+                rankings[period_key] = {
+                    "code": code_ranking,
+                    "community": community_ranking,
+                    "review": review_ranking,
+                    "mvp": mvp_ranking,
+                }
+            result[period_type] = rankings
+
+        result["last_updated"] = datetime.datetime.now().strftime('%Y-%m-%d')
+        return result
 
 
 def main():
@@ -381,16 +245,14 @@ def main():
     calculator = RankingCalculator()
 
     repositories = REPOSITORIES
-
     cache_dir = Path("cache/raw_contributor_data")
 
-    # Process PRs for code contributions and reviews
+    # Process PRs for code contributions and reviews (single pass per file)
     print("Processing PRs for code contributions and reviews...")
     for repo in repositories:
         prs_file = cache_dir / f"{repo}_prs.json"
         if prs_file.exists():
-            calculator.process_prs(str(prs_file))
-            calculator.process_reviews(str(prs_file))
+            calculator.process_prs_and_reviews(str(prs_file))
 
     # Process issues for community contributions
     print("Processing issues for community contributions...")
@@ -409,13 +271,8 @@ def main():
     print("Generating rankings...")
     rankings = calculator.generate_rankings()
 
-    # Write output
-    output_path = Path("results")
-    output_path.mkdir(exist_ok=True, parents=True)
-
-    output_file = output_path / "rankings.json"
-    with open(output_file, 'w') as f:
-        json.dump(rankings, f, indent=2)
+    output_file = "results/rankings.json"
+    write_json_output(rankings, output_file)
 
     print(f"\nDone! Generated {output_file}")
 
