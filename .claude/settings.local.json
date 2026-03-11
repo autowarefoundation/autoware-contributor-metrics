@@ -25,7 +25,9 @@
       "Bash(git log:*)",
       "Bash(git add:*)",
       "Bash(git remote set-url:*)",
-      "Bash(gh run:*)"
+      "Bash(gh run:*)",
+      "Bash(git status:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []
