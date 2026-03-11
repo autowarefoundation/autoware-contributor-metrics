@@ -10,130 +10,60 @@ Rules:
 - Include all autoware_ai legacy repositories for historical tracking
 """
 
-import os
 import sys
 import argparse
-import requests
-import json
-import time
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
-from pathlib import Path
+from typing import List, Dict
+
+from github_client import GitHubGraphQLClient
+from utils import parse_github_datetime, write_json_output
 
 
-class GitHubRepoFetcher:
-    """Client for fetching repository information from GitHub GraphQL API"""
+def fetch_all_repositories(client: GitHubGraphQLClient) -> List[Dict]:
+    """Fetch all repositories from autowarefoundation organization"""
+    print("Fetching repositories from autowarefoundation...")
 
-    def __init__(self, token: str = None):
-        self.token = token or os.getenv("GITHUB_TOKEN")
-        if not self.token:
-            raise ValueError("GITHUB_TOKEN is required. Provide it as an argument or set it as an environment variable.")
+    all_repos = []
+    cursor = None
+    page = 0
 
-        self.base_url = "https://api.github.com/graphql"
-        self.headers = {"Authorization": f"Bearer {self.token}"}
-        self.rate_limit_wait = 1
-
-    def execute_query(self, query: str, variables: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Execute a GraphQL query with rate limiting and error handling"""
-        payload = {"query": query}
-        if variables:
-            payload["variables"] = variables
-
-        max_retries = 5
-        retry_delay = 1
-        for attempt in range(max_retries):
-            try:
-                resp = requests.post(
-                    self.base_url,
-                    json=payload,
-                    headers=self.headers,
-                    timeout=60
-                )
-
-                remaining = int(resp.headers.get('X-RateLimit-Remaining', 0))
-                reset_time = int(resp.headers.get('X-RateLimit-Reset', 0))
-
-                if remaining < 10:
-                    wait_time = max(reset_time - int(time.time()), 0) + 1
-                    if wait_time > 0:
-                        print(f"Rate limit low ({remaining} remaining). Waiting {wait_time} seconds...")
-                        time.sleep(wait_time)
-
-                if resp.status_code == 403:
-                    wait_time = max(reset_time - int(time.time()), 0) + 1
-                    if attempt < max_retries - 1:
-                        print(f"Rate limit exceeded. Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}...")
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        raise Exception(f"Rate limit exceeded after {max_retries} retries")
-
-                resp.raise_for_status()
-                data = resp.json()
-
-                if 'errors' in data:
-                    error_messages = [err.get('message', 'Unknown error') for err in data['errors']]
-                    raise Exception(f"GraphQL errors: {error_messages}")
-
-                time.sleep(self.rate_limit_wait)
-                return data
-
-            except requests.exceptions.RequestException as e:
-                if attempt < max_retries - 1:
-                    print(f"Request failed: {e}. Retrying in {retry_delay * (2 ** attempt)} seconds...")
-                    time.sleep(retry_delay * (2 ** attempt))
-                    continue
-                else:
-                    print(f"Request failed after {max_retries} attempts: {e}")
-                    sys.exit(1)
-
-        raise Exception("Unexpected error in execute_query")
-
-    def fetch_all_repositories(self) -> List[Dict]:
-        """Fetch all repositories from autowarefoundation organization"""
-        print("Fetching repositories from autowarefoundation...")
-
-        all_repos = []
-        cursor = None
-        page = 0
-
-        query = """
-        query($cursor: String) {
-            organization(login: "autowarefoundation") {
-                repositories(first: 100, after: $cursor) {
-                    pageInfo {
-                        hasNextPage
-                        endCursor
-                    }
-                    nodes {
-                        name
-                        isArchived
-                        stargazerCount
-                        forkCount
-                        pushedAt
-                        updatedAt
-                    }
+    query = """
+    query($cursor: String) {
+        organization(login: "autowarefoundation") {
+            repositories(first: 100, after: $cursor) {
+                pageInfo {
+                    hasNextPage
+                    endCursor
+                }
+                nodes {
+                    name
+                    isArchived
+                    stargazerCount
+                    forkCount
+                    pushedAt
+                    updatedAt
                 }
             }
         }
-        """
+    }
+    """
 
-        while True:
-            page += 1
-            print(f"Fetching page {page}...")
-            data = self.execute_query(query, {"cursor": cursor})
+    while True:
+        page += 1
+        print(f"Fetching page {page}...")
+        data = client.execute_query(query, {"cursor": cursor})
 
-            repos = data["data"]["organization"]["repositories"]["nodes"]
-            all_repos.extend(repos)
+        repos = data["data"]["organization"]["repositories"]["nodes"]
+        all_repos.extend(repos)
 
-            page_info = data["data"]["organization"]["repositories"]["pageInfo"]
-            if page_info["hasNextPage"]:
-                cursor = page_info["endCursor"]
-            else:
-                break
+        page_info = data["data"]["organization"]["repositories"]["pageInfo"]
+        if page_info["hasNextPage"]:
+            cursor = page_info["endCursor"]
+        else:
+            break
 
-        print(f"Fetched {len(all_repos)} repositories total")
-        return all_repos
+    print(f"Fetched {len(all_repos)} repositories total")
+    return all_repos
 
 
 def filter_and_rank_repositories(repos: List[Dict], cutoff_years: int = 2) -> Dict:
@@ -159,10 +89,7 @@ def filter_and_rank_repositories(repos: List[Dict], cutoff_years: int = 2) -> Di
 
         # Parse update date
         updated_at_str = repo.get("pushedAt") or repo.get("updatedAt")
-        try:
-            updated_at = datetime.strptime(updated_at_str, '%Y-%m-%dT%H:%M:%SZ')
-        except (ValueError, TypeError):
-            updated_at = None
+        updated_at = parse_github_datetime(updated_at_str)
 
         repo_info = {
             "name": name,
@@ -239,25 +166,21 @@ def main():
     args = parser.parse_args()
 
     try:
-        client = GitHubRepoFetcher(token=args.token)
+        client = GitHubGraphQLClient(token=args.token)
     except ValueError as e:
         print(f"Error: {e}")
         sys.exit(1)
 
     # Fetch all repositories
-    repos = client.fetch_all_repositories()
+    repos = fetch_all_repositories(client)
 
     # Filter and rank
     result = filter_and_rank_repositories(repos, cutoff_years=args.cutoff_years)
 
     # Write output
-    output_path = Path(args.output)
-    output_path.parent.mkdir(exist_ok=True, parents=True)
+    write_json_output(result, args.output)
 
-    with open(output_path, 'w') as f:
-        json.dump(result, f, indent=2)
-
-    print(f"\nDone! Generated {output_path}")
+    print(f"\nDone! Generated {args.output}")
     print(f"Active repositories (Top {len(result['active'])} by score):")
     for repo in result['active'][:10]:
         print(f"  - {repo['name']}: score={repo['score']} ({repo['stars']} stars + {repo['forks']} forks)")
