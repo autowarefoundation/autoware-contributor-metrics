@@ -50,9 +50,15 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
   }
 });
 
-// Set up toggle button
+// Set up toggle button and apply theme synchronously (before IIFE await)
 document.getElementById('theme-toggle')?.addEventListener('click', cycleTheme);
 applyTheme();
+
+// =============================================================================
+// Main Application (IIFE to avoid global scope pollution)
+// =============================================================================
+
+(async function () {
 
 // =============================================================================
 // Constants
@@ -69,9 +75,17 @@ const COLORS = {
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
 };
 
-const COLOR_CLASSES = ['cyan', 'coral', 'teal', 'gold'];
+const RANKING_CATEGORIES = [
+  { key: 'mvp',       elementId: 'mvp-ranking-table',       color: '#FFD700', valueKey: 'score', valueName: 'Score' },
+  { key: 'code',      elementId: 'code-ranking-table',      color: '#00D9FF', valueKey: 'count', valueName: 'Count' },
+  { key: 'community', elementId: 'community-ranking-table', color: '#FF6B6B', valueKey: 'count', valueName: 'Count' },
+  { key: 'review',    elementId: 'review-ranking-table',    color: '#4ECDC4', valueKey: 'count', valueName: 'Count' },
+];
 
 let REPOSITORIES = [];
+let rankingsData = null;
+let currentPeriodType = 'monthly';
+const rankingCharts = {};
 
 // =============================================================================
 // Utility Functions
@@ -115,10 +129,6 @@ function getChartHeight(base) {
   if (window.innerWidth < 768) return Math.min(base, 300);
   if (window.innerWidth < 1200) return Math.min(base, 350);
   return base;
-}
-
-function isMobile() {
-  return window.innerWidth < 768;
 }
 
 // =============================================================================
@@ -181,7 +191,7 @@ function createChartOptions({ series, title, yAxisTitle, colors, showLegend = fa
 
 function renderMetricCards(containerId, cards) {
   const container = document.getElementById(containerId);
-  container.innerHTML = cards.map(card => card).join('');
+  container.innerHTML = cards.join('');
 }
 
 function createMetricCard(label, value, colorClass, sub) {
@@ -312,20 +322,6 @@ function renderContributorsStats(json) {
 // Rankings
 // =============================================================================
 
-let rankingsData = null;
-let currentPeriodType = 'monthly';
-let mvpChart = null;
-let codeChart = null;
-let communityChart = null;
-let reviewChart = null;
-
-const RANKING_COLORS = {
-  mvp: '#FFD700',
-  code: '#00D9FF',
-  community: '#FF6B6B',
-  review: '#4ECDC4',
-};
-
 function createRankingChart(elementId, data, color, valueKey = 'count', valueName = 'Count') {
   const topData = data.slice(0, 15);
 
@@ -391,21 +387,13 @@ function updateRankingCharts(periodKey) {
   const periodData = rankingsData[currentPeriodType][periodKey];
   if (!periodData) return;
 
-  if (mvpChart) mvpChart.destroy();
-  mvpChart = createRankingChart('mvp-ranking-table', periodData.mvp || [], RANKING_COLORS.mvp, 'score', 'Score');
-  mvpChart.render();
-
-  if (codeChart) codeChart.destroy();
-  codeChart = createRankingChart('code-ranking-table', periodData.code || [], RANKING_COLORS.code);
-  codeChart.render();
-
-  if (communityChart) communityChart.destroy();
-  communityChart = createRankingChart('community-ranking-table', periodData.community || [], RANKING_COLORS.community);
-  communityChart.render();
-
-  if (reviewChart) reviewChart.destroy();
-  reviewChart = createRankingChart('review-ranking-table', periodData.review || [], RANKING_COLORS.review);
-  reviewChart.render();
+  for (const cat of RANKING_CATEGORIES) {
+    if (rankingCharts[cat.key]) rankingCharts[cat.key].destroy();
+    rankingCharts[cat.key] = createRankingChart(
+      cat.elementId, periodData[cat.key] || [], cat.color, cat.valueKey, cat.valueName,
+    );
+    rankingCharts[cat.key].render();
+  }
 }
 
 function populatePeriodSelector() {
@@ -427,27 +415,23 @@ function populatePeriodSelector() {
 }
 
 function setupRankingsUI() {
-  const btnMonthly = document.getElementById('btn-monthly');
-  const btnQuarterly = document.getElementById('btn-quarterly');
-  const btnYearly = document.getElementById('btn-yearly');
   const periodSelect = document.getElementById('period-select');
   const updatedSpan = document.getElementById('rankings-updated');
-  const allButtons = [btnMonthly, btnQuarterly, btnYearly];
+  const periodTypes = ['monthly', 'quarterly', 'yearly'];
+  const buttons = periodTypes.map(type => document.getElementById(`btn-${type}`));
 
   if (rankingsData.last_updated) {
     updatedSpan.textContent = `Last updated: ${formatDate(rankingsData.last_updated)}`;
   }
 
-  function activateButton(activeBtn, periodType) {
-    currentPeriodType = periodType;
-    allButtons.forEach(btn => btn.classList.remove('active'));
-    activeBtn.classList.add('active');
-    populatePeriodSelector();
-  }
-
-  btnMonthly.addEventListener('click', () => activateButton(btnMonthly, 'monthly'));
-  btnQuarterly.addEventListener('click', () => activateButton(btnQuarterly, 'quarterly'));
-  btnYearly.addEventListener('click', () => activateButton(btnYearly, 'yearly'));
+  periodTypes.forEach((type, i) => {
+    buttons[i].addEventListener('click', () => {
+      currentPeriodType = type;
+      buttons.forEach(btn => btn.classList.remove('active'));
+      buttons[i].classList.add('active');
+      populatePeriodSelector();
+    });
+  });
 
   periodSelect.addEventListener('change', (e) => {
     updateRankingCharts(e.target.value);
@@ -529,53 +513,40 @@ function setupScrollObserver() {
 setupScrollObserver();
 setupRankingTabs();
 
-// Load repositories first, then load chart data
-fetch('repositories.json')
-  .then((res) => res.json())
-  .then((repoData) => {
-    REPOSITORIES = repoData.repositories || [];
+// 1. Load repos (graceful fallback)
+try {
+  const repoData = await fetch('repositories.json').then(r => r.json());
+  REPOSITORIES = repoData.repositories || [];
+} catch { /* REPOSITORIES stays [] */ }
 
-    fetch('stars_history.json')
-      .then((res) => res.json())
-      .then((json) => {
-        renderStarsChart(json);
-        renderStarsStats(json);
-      })
-      .catch(() => showError('#stars-chart', 'Stars history data not available'));
+// 2. Load data files in parallel
+const [starsResult, contributorsResult, rankingsResult] = await Promise.allSettled([
+  fetch('stars_history.json').then(r => r.json()),
+  fetch('contributors_history.json').then(r => r.json()),
+  fetch('rankings.json').then(r => r.json()),
+]);
 
-    fetch('contributors_history.json')
-      .then((res) => res.json())
-      .then((json) => {
-        renderContributorsChart(json);
-        renderContributorsStats(json);
-      })
-      .catch(() => showError('#contributors-chart', 'Contributor history data not available'));
-  })
-  .catch(() => {
-    fetch('stars_history.json')
-      .then((res) => res.json())
-      .then((json) => {
-        renderStarsChart(json);
-        renderStarsStats(json);
-      })
-      .catch(() => showError('#stars-chart', 'Stars history data not available'));
+// 3. Render each independently (error per section)
+if (starsResult.status === 'fulfilled') {
+  renderStarsChart(starsResult.value);
+  renderStarsStats(starsResult.value);
+} else {
+  showError('#stars-chart', 'Stars history data not available');
+}
 
-    fetch('contributors_history.json')
-      .then((res) => res.json())
-      .then((json) => {
-        renderContributorsChart(json);
-        renderContributorsStats(json);
-      })
-      .catch(() => showError('#contributors-chart', 'Contributor history data not available'));
-  });
+if (contributorsResult.status === 'fulfilled') {
+  renderContributorsChart(contributorsResult.value);
+  renderContributorsStats(contributorsResult.value);
+} else {
+  showError('#contributors-chart', 'Contributor history data not available');
+}
 
-fetch('rankings.json')
-  .then((res) => res.json())
-  .then((json) => {
-    rankingsData = json;
-    setupRankingsUI();
-  })
-  .catch(() => {
-    document.getElementById('mvp-ranking-table').innerHTML =
-      '<p style="color: var(--text-muted); padding: 24px;">Rankings data not available</p>';
-  });
+if (rankingsResult.status === 'fulfilled') {
+  rankingsData = rankingsResult.value;
+  setupRankingsUI();
+} else {
+  document.getElementById('mvp-ranking-table').innerHTML =
+    '<p style="color: var(--text-muted); padding: 24px;">Rankings data not available</p>';
+}
+
+})();
