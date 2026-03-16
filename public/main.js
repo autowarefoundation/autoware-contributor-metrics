@@ -73,6 +73,7 @@ const COLORS = {
     '#ABEBC6', '#F9E79F',
   ],
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
+  downloads: ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D'],
 };
 
 const RANKING_CATEGORIES = [
@@ -319,6 +320,144 @@ function renderContributorsStats(json) {
 }
 
 // =============================================================================
+// APT Downloads Section
+// =============================================================================
+
+function renderDownloadsChart(json) {
+  const chartEl = document.querySelector('#downloads-chart');
+  chartEl.textContent = '';
+
+  const cumulative = json.cumulative;
+  const series = [
+    {
+      name: 'Total',
+      data: cumulative.map(item => [new Date(item.date + '-01'), item.total]),
+    },
+    {
+      name: 'Humble',
+      data: cumulative.map(item => [new Date(item.date + '-01'), item.humble]),
+    },
+    {
+      name: 'Jazzy',
+      data: cumulative.map(item => [new Date(item.date + '-01'), item.jazzy]),
+    },
+    {
+      name: 'Rolling',
+      data: cumulative.map(item => [new Date(item.date + '-01'), item.rolling]),
+    },
+  ];
+
+  const options = createChartOptions({
+    series,
+    title: 'APT Package Download Growth (Cumulative)',
+    yAxisTitle: 'Total Downloads',
+    colors: COLORS.downloads,
+    showLegend: true,
+  });
+
+  new ApexCharts(chartEl, options).render();
+}
+
+function renderDownloadsRanking(json) {
+  const chartEl = document.querySelector('#downloads-ranking-chart');
+  chartEl.textContent = '';
+
+  const entries = Object.entries(json.package_totals);
+  const topData = entries.slice(0, 20);
+
+  if (topData.length === 0) return;
+
+  // Strip "ros-{distro}-autoware-" prefix for display
+  const labels = topData.map(([pkg]) => pkg.replace(/^ros-(humble|jazzy|rolling)-/, ''));
+  const values = topData.map(([, count]) => count);
+  const barColors = topData.map(([pkg]) => {
+    if (pkg.startsWith('ros-humble-')) return '#FF6B6B';
+    if (pkg.startsWith('ros-jazzy-')) return '#4ECDC4';
+    if (pkg.startsWith('ros-rolling-')) return '#FFE66D';
+    return '#95E1D3';
+  });
+
+  const options = {
+    series: [{ name: 'Downloads', data: values }],
+    chart: {
+      type: 'bar',
+      height: 400,
+      toolbar: { show: false },
+      background: 'transparent',
+    },
+    title: {
+      text: 'Top 20 Packages by Downloads (All Time)',
+      align: 'left',
+      style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
+    },
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        borderRadius: 4,
+        distributed: true,
+        barHeight: '70%',
+        dataLabels: { position: 'top' },
+      },
+    },
+    dataLabels: {
+      enabled: true,
+      offsetX: 25,
+      formatter: formatNumber,
+      style: { fontSize: '11px', fontFamily: 'IBM Plex Mono, monospace' },
+    },
+    xaxis: { categories: labels },
+    yaxis: {
+      labels: {
+        style: { fontSize: '11px' },
+        maxWidth: 350,
+      },
+    },
+    colors: barColors,
+    legend: { show: false },
+    tooltip: {
+      theme: 'dark',
+      y: { formatter: formatNumber },
+    },
+    grid: {
+      xaxis: { lines: { show: true } },
+      yaxis: { lines: { show: false } },
+    },
+  };
+
+  new ApexCharts(chartEl, options).render();
+}
+
+function renderDownloadsStats(json) {
+  const cumulative = json.cumulative;
+  const lastEntry = cumulative.length > 0 ? cumulative[cumulative.length - 1] : null;
+
+  const monthKeys = Object.keys(json.monthly).sort();
+  const latestMonthKey = monthKeys[monthKeys.length - 1];
+  const latestMonth = json.monthly[latestMonthKey] || {};
+
+  const firstMonthKey = monthKeys[0] || 'N/A';
+
+  // Update subtitle under section heading
+  const section = document.querySelector('#downloads');
+  let subtitle = section.querySelector('.section-subtitle');
+  if (!subtitle) {
+    subtitle = document.createElement('p');
+    subtitle.className = 'section-subtitle';
+    section.querySelector('.section-heading').after(subtitle);
+  }
+  subtitle.textContent = `${firstMonthKey} \u2013 ${latestMonthKey || 'N/A'} (excl. Jan\u2013Jun 2025)`;
+
+  const cards = [
+    createMetricCard('Total Downloads', lastEntry?.total || 0, 'cyan'),
+    createMetricCard('Humble', lastEntry?.humble || 0, 'coral'),
+    createMetricCard('Jazzy', lastEntry?.jazzy || 0, 'teal'),
+    createMetricCard('Rolling', lastEntry?.rolling || 0, 'yellow'),
+  ];
+
+  renderMetricCards('downloads-stats', cards);
+}
+
+// =============================================================================
 // Rankings
 // =============================================================================
 
@@ -520,10 +659,11 @@ try {
 } catch { /* REPOSITORIES stays [] */ }
 
 // 2. Load data files in parallel
-const [starsResult, contributorsResult, rankingsResult] = await Promise.allSettled([
+const [starsResult, contributorsResult, rankingsResult, downloadsResult] = await Promise.allSettled([
   fetch('stars_history.json').then(r => r.json()),
   fetch('contributors_history.json').then(r => r.json()),
   fetch('rankings.json').then(r => r.json()),
+  fetch('apt_downloads.json').then(r => r.json()),
 ]);
 
 // 3. Render each independently (error per section)
@@ -539,6 +679,14 @@ if (contributorsResult.status === 'fulfilled') {
   renderContributorsStats(contributorsResult.value);
 } else {
   showError('#contributors-chart', 'Contributor history data not available');
+}
+
+if (downloadsResult.status === 'fulfilled') {
+  renderDownloadsChart(downloadsResult.value);
+  renderDownloadsRanking(downloadsResult.value);
+  renderDownloadsStats(downloadsResult.value);
+} else {
+  showError('#downloads-chart', 'APT download data not available');
 }
 
 if (rankingsResult.status === 'fulfilled') {
