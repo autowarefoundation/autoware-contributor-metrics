@@ -14,7 +14,7 @@ Live site: https://autowarefoundation.github.io/autoware-contributor-metrics/ind
 
 ### Running locally
 
-The data collection and processing pipeline consists of six scripts that must be run in order:
+The data collection and processing pipeline consists of eight scripts that must be run in order:
 
 ```bash
 # 0. Fetch and generate repository list from GitHub API
@@ -26,17 +26,23 @@ python scripts/get_contributors.py --token <GitHubToken>
 # 2. Fetch stargazer data from GitHub GraphQL API
 python scripts/get_stargazers.py --token <GitHubToken>
 
-# 3. Process contributor data into cumulative history
+# 3. Fetch commit data from GitHub GraphQL API
+python scripts/get_commits.py --token <GitHubToken>
+
+# 4. Process contributor data into cumulative history
 python scripts/calculate_contributor_history.py
 
-# 4. Process stargazer data into cumulative history
+# 5. Process stargazer data into cumulative history
 python scripts/calculate_stargazers_history.py
 
-# 5. Calculate contributor rankings
+# 6. Process commit data into quarterly history
+python scripts/calculate_commits_history.py
+
+# 7. Calculate contributor rankings
 python scripts/calculate_rankings.py
 
-# 6. Copy results to public folder
-cp results/contributors_history.json results/stars_history.json results/rankings.json public/
+# 8. Copy results to public folder
+cp results/contributors_history.json results/stars_history.json results/commits_history.json results/rankings.json public/
 ```
 
 Alternatively, use the `GITHUB_TOKEN` environment variable instead of `--token`:
@@ -49,6 +55,7 @@ For incremental updates (faster, fetches only new data since last run):
 ```bash
 python scripts/get_contributors.py --use-cache
 python scripts/get_stargazers.py --use-cache
+python scripts/get_commits.py --use-cache
 ```
 
 ### Installing dependencies
@@ -68,7 +75,7 @@ python -m http.server 8000
 # Visit http://localhost:8000/index.html
 ```
 
-The page expects `contributors_history.json`, `stars_history.json`, `rankings.json`, and `repositories.json` to be in the `public/` directory.
+The page expects `contributors_history.json`, `stars_history.json`, `commits_history.json`, `rankings.json`, and `repositories.json` to be in the `public/` directory.
 
 ## Architecture
 
@@ -80,26 +87,28 @@ GitHub GraphQL API
 0. fetch_repositories.py → public/repositories.json
 1. get_contributors.py → cache/raw_contributor_data/*.json
 2. get_stargazers.py → cache/raw_stargazer_data/*.json
+3. get_commits.py → cache/raw_commit_data/*.json
     ↓
-3. calculate_contributor_history.py → results/contributors_history.json
-4. calculate_stargazers_history.py → results/stars_history.json
-5. calculate_rankings.py → results/rankings.json
+4. calculate_contributor_history.py → results/contributors_history.json
+5. calculate_stargazers_history.py → results/stars_history.json
+6. calculate_commits_history.py → results/commits_history.json
+7. calculate_rankings.py → results/rankings.json
     ↓
 Copy to public/ → Visualized in index.html
 ```
 
 ### Key Components
 
-**Data Fetchers** (`scripts/get_contributors.py` and `scripts/get_stargazers.py`):
+**Data Fetchers** (`scripts/get_contributors.py`, `scripts/get_stargazers.py`, and `scripts/get_commits.py`):
 - Use GitHub GraphQL API to fetch raw data from 24+ Autoware repositories
 - Implement rate limiting, retry logic, and error handling
 - Pagination: fetch 100 items per page, tracking cursors
 - Store raw JSON in `cache/` directories
 
-**Data Processors** (`scripts/calculate_contributor_history.py` and `scripts/calculate_stargazers_history.py`):
+**Data Processors** (`scripts/calculate_contributor_history.py`, `scripts/calculate_stargazers_history.py`, and `scripts/calculate_commits_history.py`):
 - Parse cached JSON files
-- Track first contribution/star date per user
-- Generate cumulative daily counts
+- Track first contribution/star date per user, or aggregate commits per quarter
+- Generate cumulative daily counts or quarterly totals
 - Output time-series data to `results/`
 
 **Rankings Calculator** (`scripts/calculate_rankings.py`):
@@ -109,9 +118,10 @@ Copy to public/ → Visualized in index.html
 - Excludes bot accounts (dependabot, github-actions, etc.)
 
 **Visualization** (`public/main.js` and `public/index.html`):
-- Uses ApexCharts to render interactive line charts
-- Fetches JSON from `stars_history.json` and `contributors_history.json`
+- Uses ApexCharts to render interactive line and bar charts
+- Fetches JSON from `stars_history.json`, `contributors_history.json`, and `commits_history.json`
 - Displays total metrics plus breakdown by repository/contributor type
+- Quarterly commit activity shown as a bar chart
 
 ### Contributor Types
 
@@ -136,7 +146,7 @@ The `repositories.py` module loads this JSON file and provides the `REPOSITORIES
 The workflow `.github/workflows/measure-contributors.yml`:
 - Runs daily via cron (`0 0 * * *`) and on push to main
 - Uses a secret `ACCESS_TOKEN` for GitHub API access
-- Runs all six scripts in sequence with `--use-cache` for incremental fetching
+- Runs all eight scripts in sequence with `--use-cache` for incremental fetching
 - Uses `actions/cache` to persist cache directory between workflow runs
 - Copies results to `public/` and deploys to GitHub Pages
 - Archives raw cache and results as workflow artifacts
@@ -145,7 +155,7 @@ The workflow `.github/workflows/measure-contributors.yml`:
 
 ### Rate Limiting Strategy
 
-Both fetcher scripts implement rate limiting with identical logic (code is duplicated between `get_contributors.py` and `get_stargazers.py` — changes must be applied to both):
+All fetcher scripts use `GitHubGraphQLClient` from `github_client.py` which implements rate limiting:
 - Check `X-RateLimit-Remaining` header before each request
 - Wait until rate limit reset if < 10 requests remaining
 - Exponential backoff on 403 errors (up to 5 retries)
