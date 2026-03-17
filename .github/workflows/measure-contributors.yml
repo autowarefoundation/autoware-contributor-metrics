@@ -58,12 +58,15 @@ jobs:
           python scripts/fetch_repositories.py --token ${{ secrets.ACCESS_TOKEN }}
           python scripts/get_contributors.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
           python scripts/get_stargazers.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
+          python scripts/get_commits.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
           python scripts/get_apt_downloads.py --use-cache
           python scripts/calculate_contributor_history.py
           python scripts/calculate_stargazers_history.py
+          python scripts/calculate_commits_history.py
           python scripts/calculate_rankings.py
           cp results/contributors_history.json public/
           cp results/stars_history.json public/
+          cp results/commits_history.json public/
           cp results/rankings.json public/
           cp results/apt_downloads.json public/
 

@@ -74,6 +74,7 @@ const COLORS = {
   ],
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
   downloads: ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D'],
+  commits: ['#00D9FF'],
 };
 
 const RANKING_CATEGORIES = [
@@ -458,6 +459,79 @@ function renderDownloadsStats(json) {
 }
 
 // =============================================================================
+// Commits Section
+// =============================================================================
+
+function renderCommitsChart(json) {
+  const chartEl = document.querySelector('#commits-chart');
+  chartEl.innerHTML = '';
+
+  const history = json.total_commits_history || [];
+  const categories = history.map(item => item.quarter);
+  const values = history.map(item => item.commit_count);
+
+  const options = {
+    series: [{ name: 'Commits', data: values }],
+    chart: {
+      type: 'bar',
+      height: getChartHeight(400),
+      toolbar: { show: true },
+      background: 'transparent',
+    },
+    title: {
+      text: 'Quarterly Commit Count (All Repositories)',
+      align: 'left',
+      style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
+    },
+    plotOptions: {
+      bar: {
+        borderRadius: 4,
+        columnWidth: '60%',
+      },
+    },
+    dataLabels: { enabled: false },
+    xaxis: { categories },
+    yaxis: {
+      min: 0,
+      title: { text: 'Number of Commits' },
+      labels: { formatter: formatNumber },
+    },
+    tooltip: {
+      theme: 'dark',
+      y: { formatter: formatNumber },
+    },
+    colors: COLORS.commits,
+    grid: {
+      row: { opacity: 0 },
+    },
+  };
+
+  new ApexCharts(chartEl, options).render();
+}
+
+function renderCommitsStats(json) {
+  const history = json.total_commits_history || [];
+  const totalCommits = history.reduce((sum, item) => sum + item.commit_count, 0);
+
+  const latestQuarter = history.length > 0 ? history[history.length - 1] : null;
+
+  let peakQuarter = null;
+  for (const item of history) {
+    if (!peakQuarter || item.commit_count > peakQuarter.commit_count) {
+      peakQuarter = item;
+    }
+  }
+
+  const cards = [
+    createMetricCard('Total Commits', totalCommits, 'cyan', 'Since 2022'),
+    createMetricCard('Latest Quarter', latestQuarter?.commit_count || 0, 'coral', latestQuarter?.quarter || 'N/A'),
+    createMetricCard('Peak Quarter', peakQuarter?.commit_count || 0, 'teal', peakQuarter?.quarter || 'N/A'),
+  ];
+
+  renderMetricCards('commits-stats', cards);
+}
+
+// =============================================================================
 // Rankings
 // =============================================================================
 
@@ -659,11 +733,12 @@ try {
 } catch { /* REPOSITORIES stays [] */ }
 
 // 2. Load data files in parallel
-const [starsResult, contributorsResult, rankingsResult, downloadsResult] = await Promise.allSettled([
+const [starsResult, contributorsResult, rankingsResult, downloadsResult, commitsResult] = await Promise.allSettled([
   fetch('stars_history.json').then(r => r.json()),
   fetch('contributors_history.json').then(r => r.json()),
   fetch('rankings.json').then(r => r.json()),
   fetch('apt_downloads.json').then(r => r.json()),
+  fetch('commits_history.json').then(r => r.json()),
 ]);
 
 // 3. Render each independently (error per section)
@@ -687,6 +762,13 @@ if (downloadsResult.status === 'fulfilled') {
   renderDownloadsStats(downloadsResult.value);
 } else {
   showError('#downloads-chart', 'APT download data not available');
+}
+
+if (commitsResult.status === 'fulfilled') {
+  renderCommitsChart(commitsResult.value);
+  renderCommitsStats(commitsResult.value);
+} else {
+  showError('#commits-chart', 'Commit history data not available');
 }
 
 if (rankingsResult.status === 'fulfilled') {
