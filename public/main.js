@@ -554,9 +554,9 @@ function renderCommitsStats(commitsJson, activityJson) {
     createMetricCard('Total Commits', totalCommits, 'cyan', 'Since 2022'),
     createMetricCard('Latest Quarter Commits', latestCommit?.commit_count || 0, 'cyan', latestCommit?.quarter || 'N/A'),
     createMetricCard('Total Merged PRs', totalPRs, 'coral', 'Since 2022'),
-    createMetricCard('Latest Quarter PRs', latestPR?.merged_pr_count || 0, 'coral', latestPR?.quarter || 'N/A'),
+    createMetricCard('Latest Quarter Merged PRs', latestPR?.merged_pr_count || 0, 'coral', latestPR?.quarter || 'N/A'),
     createMetricCard('Total Resolved Issues', totalIssues, 'teal', 'Since 2022'),
-    createMetricCard('Latest Quarter Issues', latestIssue?.resolved_issue_count || 0, 'teal', latestIssue?.quarter || 'N/A'),
+    createMetricCard('Latest Quarter Resolved Issues', latestIssue?.resolved_issue_count || 0, 'teal', latestIssue?.quarter || 'N/A'),
   ];
 
   renderMetricCards('commits-stats', cards);
