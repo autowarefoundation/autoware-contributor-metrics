@@ -74,8 +74,7 @@ const COLORS = {
   ],
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
   downloads: ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D'],
-  commits: ['#00D9FF'],
-  activity: ['#FF6B6B', '#4ECDC4'],
+  commits: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
 };
 
 const RANKING_CATEGORIES = [
@@ -463,102 +462,36 @@ function renderDownloadsStats(json) {
 // Commits Section
 // =============================================================================
 
-function renderCommitsChart(json) {
+function renderCommitsChart(commitsJson, activityJson) {
   const chartEl = document.querySelector('#commits-chart');
   chartEl.innerHTML = '';
 
-  const history = json.total_commits_history || [];
-  const categories = history.map(item => item.quarter);
-  const values = history.map(item => item.commit_count);
+  const commitHistory = commitsJson.total_commits_history || [];
+  const prHistory = activityJson ? (activityJson.total_merged_prs_history || []) : [];
+  const issueHistory = activityJson ? (activityJson.total_resolved_issues_history || []) : [];
 
-  const options = {
-    series: [{ name: 'Commits', data: values }],
-    chart: {
-      type: 'bar',
-      height: getChartHeight(400),
-      toolbar: { show: true },
-      background: 'transparent',
-    },
-    title: {
-      text: 'Quarterly Commit Count (All Repositories)',
-      align: 'left',
-      style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
-    },
-    plotOptions: {
-      bar: {
-        borderRadius: 4,
-        columnWidth: '60%',
-      },
-    },
-    dataLabels: { enabled: false },
-    xaxis: { categories },
-    yaxis: {
-      min: 0,
-      title: { text: 'Number of Commits' },
-      labels: { formatter: formatNumber },
-    },
-    tooltip: {
-      theme: 'dark',
-      y: { formatter: formatNumber },
-    },
-    colors: COLORS.commits,
-    grid: {
-      row: { opacity: 0 },
-    },
-  };
-
-  new ApexCharts(chartEl, options).render();
-}
-
-function renderCommitsStats(json) {
-  const history = json.total_commits_history || [];
-  const totalCommits = history.reduce((sum, item) => sum + item.commit_count, 0);
-
-  const latestQuarter = history.length > 0 ? history[history.length - 1] : null;
-
-  let peakQuarter = null;
-  for (const item of history) {
-    if (!peakQuarter || item.commit_count > peakQuarter.commit_count) {
-      peakQuarter = item;
-    }
-  }
-
-  const cards = [
-    createMetricCard('Total Commits', totalCommits, 'cyan', 'Since 2022'),
-    createMetricCard('Latest Quarter', latestQuarter?.commit_count || 0, 'coral', latestQuarter?.quarter || 'N/A'),
-    createMetricCard('Peak Quarter', peakQuarter?.commit_count || 0, 'teal', peakQuarter?.quarter || 'N/A'),
-  ];
-
-  renderMetricCards('commits-stats', cards);
-}
-
-// =============================================================================
-// Activity Section (Merged PRs & Resolved Issues)
-// =============================================================================
-
-function renderActivityChart(json) {
-  const chartEl = document.querySelector('#activity-chart');
-  chartEl.innerHTML = '';
-
-  const prHistory = json.total_merged_prs_history || [];
-  const issueHistory = json.total_resolved_issues_history || [];
-
-  // Merge quarters from both series
+  // Merge quarters from all series
   const quarterSet = new Set();
+  commitHistory.forEach(item => quarterSet.add(item.quarter));
   prHistory.forEach(item => quarterSet.add(item.quarter));
   issueHistory.forEach(item => quarterSet.add(item.quarter));
   const categories = Array.from(quarterSet).sort();
 
+  const commitMap = {};
+  commitHistory.forEach(item => { commitMap[item.quarter] = item.commit_count; });
   const prMap = {};
   prHistory.forEach(item => { prMap[item.quarter] = item.merged_pr_count; });
   const issueMap = {};
   issueHistory.forEach(item => { issueMap[item.quarter] = item.resolved_issue_count; });
 
+  const series = [
+    { name: 'Commits', data: categories.map(q => commitMap[q] || 0) },
+    { name: 'Merged PRs', data: categories.map(q => prMap[q] || 0) },
+    { name: 'Resolved Issues', data: categories.map(q => issueMap[q] || 0) },
+  ];
+
   const options = {
-    series: [
-      { name: 'Merged PRs', data: categories.map(q => prMap[q] || 0) },
-      { name: 'Resolved Issues', data: categories.map(q => issueMap[q] || 0) },
-    ],
+    series,
     chart: {
       type: 'bar',
       height: getChartHeight(400),
@@ -566,7 +499,7 @@ function renderActivityChart(json) {
       background: 'transparent',
     },
     title: {
-      text: 'Quarterly Merged PRs & Resolved Issues (All Repositories)',
+      text: 'Quarterly Activity (All Repositories)',
       align: 'left',
       style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
     },
@@ -587,7 +520,7 @@ function renderActivityChart(json) {
       theme: 'dark',
       y: { formatter: formatNumber },
     },
-    colors: COLORS.activity,
+    colors: COLORS.commits,
     legend: {
       position: 'bottom',
       horizontalAlign: 'center',
@@ -603,9 +536,13 @@ function renderActivityChart(json) {
   new ApexCharts(chartEl, options).render();
 }
 
-function renderActivityStats(json) {
-  const prHistory = json.total_merged_prs_history || [];
-  const issueHistory = json.total_resolved_issues_history || [];
+function renderCommitsStats(commitsJson, activityJson) {
+  const commitHistory = commitsJson.total_commits_history || [];
+  const prHistory = activityJson ? (activityJson.total_merged_prs_history || []) : [];
+  const issueHistory = activityJson ? (activityJson.total_resolved_issues_history || []) : [];
+
+  const totalCommits = commitHistory.reduce((sum, item) => sum + item.commit_count, 0);
+  const latestCommit = commitHistory.length > 0 ? commitHistory[commitHistory.length - 1] : null;
 
   const totalPRs = prHistory.reduce((sum, item) => sum + item.merged_pr_count, 0);
   const latestPR = prHistory.length > 0 ? prHistory[prHistory.length - 1] : null;
@@ -614,14 +551,17 @@ function renderActivityStats(json) {
   const latestIssue = issueHistory.length > 0 ? issueHistory[issueHistory.length - 1] : null;
 
   const cards = [
+    createMetricCard('Total Commits', totalCommits, 'cyan', 'Since 2022'),
+    createMetricCard('Latest Quarter Commits', latestCommit?.commit_count || 0, 'cyan', latestCommit?.quarter || 'N/A'),
     createMetricCard('Total Merged PRs', totalPRs, 'coral', 'Since 2022'),
     createMetricCard('Latest Quarter PRs', latestPR?.merged_pr_count || 0, 'coral', latestPR?.quarter || 'N/A'),
     createMetricCard('Total Resolved Issues', totalIssues, 'teal', 'Since 2022'),
     createMetricCard('Latest Quarter Issues', latestIssue?.resolved_issue_count || 0, 'teal', latestIssue?.quarter || 'N/A'),
   ];
 
-  renderMetricCards('activity-stats', cards);
+  renderMetricCards('commits-stats', cards);
 }
+
 
 // =============================================================================
 // Rankings
@@ -858,17 +798,11 @@ if (downloadsResult.status === 'fulfilled') {
 }
 
 if (commitsResult.status === 'fulfilled') {
-  renderCommitsChart(commitsResult.value);
-  renderCommitsStats(commitsResult.value);
+  const activityData = activityResult.status === 'fulfilled' ? activityResult.value : null;
+  renderCommitsChart(commitsResult.value, activityData);
+  renderCommitsStats(commitsResult.value, activityData);
 } else {
   showError('#commits-chart', 'Commit history data not available');
-}
-
-if (activityResult.status === 'fulfilled') {
-  renderActivityChart(activityResult.value);
-  renderActivityStats(activityResult.value);
-} else {
-  showError('#activity-chart', 'Activity history data not available');
 }
 
 if (rankingsResult.status === 'fulfilled') {
