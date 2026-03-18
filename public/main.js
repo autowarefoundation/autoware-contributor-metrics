@@ -75,6 +75,7 @@ const COLORS = {
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
   downloads: ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D'],
   commits: ['#00D9FF'],
+  activity: ['#FF6B6B', '#4ECDC4'],
 };
 
 const RANKING_CATEGORIES = [
@@ -532,6 +533,97 @@ function renderCommitsStats(json) {
 }
 
 // =============================================================================
+// Activity Section (Merged PRs & Resolved Issues)
+// =============================================================================
+
+function renderActivityChart(json) {
+  const chartEl = document.querySelector('#activity-chart');
+  chartEl.innerHTML = '';
+
+  const prHistory = json.total_merged_prs_history || [];
+  const issueHistory = json.total_resolved_issues_history || [];
+
+  // Merge quarters from both series
+  const quarterSet = new Set();
+  prHistory.forEach(item => quarterSet.add(item.quarter));
+  issueHistory.forEach(item => quarterSet.add(item.quarter));
+  const categories = Array.from(quarterSet).sort();
+
+  const prMap = {};
+  prHistory.forEach(item => { prMap[item.quarter] = item.merged_pr_count; });
+  const issueMap = {};
+  issueHistory.forEach(item => { issueMap[item.quarter] = item.resolved_issue_count; });
+
+  const options = {
+    series: [
+      { name: 'Merged PRs', data: categories.map(q => prMap[q] || 0) },
+      { name: 'Resolved Issues', data: categories.map(q => issueMap[q] || 0) },
+    ],
+    chart: {
+      type: 'bar',
+      height: getChartHeight(400),
+      toolbar: { show: true },
+      background: 'transparent',
+    },
+    title: {
+      text: 'Quarterly Merged PRs & Resolved Issues (All Repositories)',
+      align: 'left',
+      style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
+    },
+    plotOptions: {
+      bar: {
+        borderRadius: 4,
+        columnWidth: '60%',
+      },
+    },
+    dataLabels: { enabled: false },
+    xaxis: { categories },
+    yaxis: {
+      min: 0,
+      title: { text: 'Count' },
+      labels: { formatter: formatNumber },
+    },
+    tooltip: {
+      theme: 'dark',
+      y: { formatter: formatNumber },
+    },
+    colors: COLORS.activity,
+    legend: {
+      position: 'bottom',
+      horizontalAlign: 'center',
+      fontSize: '12px',
+      fontFamily: 'Outfit, sans-serif',
+      markers: { width: 10, height: 10, radius: 3 },
+    },
+    grid: {
+      row: { opacity: 0 },
+    },
+  };
+
+  new ApexCharts(chartEl, options).render();
+}
+
+function renderActivityStats(json) {
+  const prHistory = json.total_merged_prs_history || [];
+  const issueHistory = json.total_resolved_issues_history || [];
+
+  const totalPRs = prHistory.reduce((sum, item) => sum + item.merged_pr_count, 0);
+  const latestPR = prHistory.length > 0 ? prHistory[prHistory.length - 1] : null;
+
+  const totalIssues = issueHistory.reduce((sum, item) => sum + item.resolved_issue_count, 0);
+  const latestIssue = issueHistory.length > 0 ? issueHistory[issueHistory.length - 1] : null;
+
+  const cards = [
+    createMetricCard('Total Merged PRs', totalPRs, 'coral', 'Since 2022'),
+    createMetricCard('Latest Quarter PRs', latestPR?.merged_pr_count || 0, 'coral', latestPR?.quarter || 'N/A'),
+    createMetricCard('Total Resolved Issues', totalIssues, 'teal', 'Since 2022'),
+    createMetricCard('Latest Quarter Issues', latestIssue?.resolved_issue_count || 0, 'teal', latestIssue?.quarter || 'N/A'),
+  ];
+
+  renderMetricCards('activity-stats', cards);
+}
+
+// =============================================================================
 // Rankings
 // =============================================================================
 
@@ -733,12 +825,13 @@ try {
 } catch { /* REPOSITORIES stays [] */ }
 
 // 2. Load data files in parallel
-const [starsResult, contributorsResult, rankingsResult, downloadsResult, commitsResult] = await Promise.allSettled([
+const [starsResult, contributorsResult, rankingsResult, downloadsResult, commitsResult, activityResult] = await Promise.allSettled([
   fetch('stars_history.json').then(r => r.json()),
   fetch('contributors_history.json').then(r => r.json()),
   fetch('rankings.json').then(r => r.json()),
   fetch('apt_downloads.json').then(r => r.json()),
   fetch('commits_history.json').then(r => r.json()),
+  fetch('activity_history.json').then(r => r.json()),
 ]);
 
 // 3. Render each independently (error per section)
@@ -769,6 +862,13 @@ if (commitsResult.status === 'fulfilled') {
   renderCommitsStats(commitsResult.value);
 } else {
   showError('#commits-chart', 'Commit history data not available');
+}
+
+if (activityResult.status === 'fulfilled') {
+  renderActivityChart(activityResult.value);
+  renderActivityStats(activityResult.value);
+} else {
+  showError('#activity-chart', 'Activity history data not available');
 }
 
 if (rankingsResult.status === 'fulfilled') {

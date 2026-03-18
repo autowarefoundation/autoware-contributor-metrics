@@ -14,7 +14,7 @@ Live site: https://autowarefoundation.github.io/autoware-contributor-metrics/ind
 
 ### Running locally
 
-The data collection and processing pipeline consists of eight scripts that must be run in order:
+The data collection and processing pipeline consists of nine scripts that must be run in order:
 
 ```bash
 # 0. Fetch and generate repository list from GitHub API
@@ -38,11 +38,14 @@ python scripts/calculate_stargazers_history.py
 # 6. Process commit data into quarterly history
 python scripts/calculate_commits_history.py
 
-# 7. Calculate contributor rankings
+# 7. Process merged PRs and resolved issues into quarterly history
+python scripts/calculate_activity_history.py
+
+# 8. Calculate contributor rankings
 python scripts/calculate_rankings.py
 
-# 8. Copy results to public folder
-cp results/contributors_history.json results/stars_history.json results/commits_history.json results/rankings.json public/
+# 9. Copy results to public folder
+cp results/contributors_history.json results/stars_history.json results/commits_history.json results/activity_history.json results/rankings.json public/
 ```
 
 Alternatively, use the `GITHUB_TOKEN` environment variable instead of `--token`:
@@ -75,7 +78,7 @@ python -m http.server 8000
 # Visit http://localhost:8000/index.html
 ```
 
-The page expects `contributors_history.json`, `stars_history.json`, `commits_history.json`, `rankings.json`, and `repositories.json` to be in the `public/` directory.
+The page expects `contributors_history.json`, `stars_history.json`, `commits_history.json`, `activity_history.json`, `rankings.json`, and `repositories.json` to be in the `public/` directory.
 
 ## Architecture
 
@@ -92,7 +95,8 @@ GitHub GraphQL API
 4. calculate_contributor_history.py → results/contributors_history.json
 5. calculate_stargazers_history.py → results/stars_history.json
 6. calculate_commits_history.py → results/commits_history.json
-7. calculate_rankings.py → results/rankings.json
+7. calculate_activity_history.py → results/activity_history.json
+8. calculate_rankings.py → results/rankings.json
     ↓
 Copy to public/ → Visualized in index.html
 ```
@@ -105,9 +109,9 @@ Copy to public/ → Visualized in index.html
 - Pagination: fetch 100 items per page, tracking cursors
 - Store raw JSON in `cache/` directories
 
-**Data Processors** (`scripts/calculate_contributor_history.py`, `scripts/calculate_stargazers_history.py`, and `scripts/calculate_commits_history.py`):
+**Data Processors** (`scripts/calculate_contributor_history.py`, `scripts/calculate_stargazers_history.py`, `scripts/calculate_commits_history.py`, and `scripts/calculate_activity_history.py`):
 - Parse cached JSON files
-- Track first contribution/star date per user, or aggregate commits per quarter
+- Track first contribution/star date per user, or aggregate commits/PRs/issues per quarter
 - Generate cumulative daily counts or quarterly totals
 - Output time-series data to `results/`
 
@@ -119,9 +123,10 @@ Copy to public/ → Visualized in index.html
 
 **Visualization** (`public/main.js` and `public/index.html`):
 - Uses ApexCharts to render interactive line and bar charts
-- Fetches JSON from `stars_history.json`, `contributors_history.json`, and `commits_history.json`
+- Fetches JSON from `stars_history.json`, `contributors_history.json`, `commits_history.json`, and `activity_history.json`
 - Displays total metrics plus breakdown by repository/contributor type
 - Quarterly commit activity shown as a bar chart
+- Quarterly merged PRs and resolved issues shown as a grouped bar chart
 
 ### Contributor Types
 
