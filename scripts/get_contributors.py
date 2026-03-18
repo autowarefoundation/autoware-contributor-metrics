@@ -70,6 +70,12 @@ def get_contributors(client: GitHubGraphQLClient, contributor_type: str, reposit
                             }
                         }"""
 
+    # Add closedAt field for issues
+    issue_extra_fields = ""
+    if contributor_type == "issues":
+        issue_extra_fields = """
+                        closedAt"""
+
     query = f"""
     query($cursor: String!, $repository: String!) {{
         repository(owner:"autowarefoundation", name:$repository) {{
@@ -92,7 +98,7 @@ def get_contributors(client: GitHubGraphQLClient, contributor_type: str, reposit
                                     createdAt
                                 }}
                             }}
-                        }}{pr_extra_fields}
+                        }}{pr_extra_fields}{issue_extra_fields}
                     }}
                 }}
             }}
