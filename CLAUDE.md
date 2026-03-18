@@ -125,8 +125,7 @@ Copy to public/ → Visualized in index.html
 - Uses ApexCharts to render interactive line and bar charts
 - Fetches JSON from `stars_history.json`, `contributors_history.json`, `commits_history.json`, and `activity_history.json`
 - Displays total metrics plus breakdown by repository/contributor type
-- Quarterly commit activity shown as a bar chart
-- Quarterly merged PRs and resolved issues shown as a grouped bar chart
+- Quarterly activity (commits, merged PRs, resolved issues) shown as a grouped bar chart
 
 ### Contributor Types
 
