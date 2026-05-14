@@ -75,6 +75,7 @@ const COLORS = {
   contributors: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
   downloads: ['#00D9FF', '#FF6B6B', '#4ECDC4', '#FFE66D'],
   commits: ['#00D9FF', '#FF6B6B', '#4ECDC4'],
+  visibility: ['#00D9FF', '#FF6B6B', '#FFE66D'],
 };
 
 const RANKING_CATEGORIES = [
@@ -564,6 +565,141 @@ function renderCommitsStats(commitsJson, activityJson) {
 
 
 // =============================================================================
+// External Visibility Section
+// =============================================================================
+
+function monthToDate(monthStr) {
+  // "YYYY-MM" -> Date at first of month
+  const [y, m] = monthStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, 1));
+}
+
+function renderArxivMentionsChart(arxivJson) {
+  const chartEl = document.querySelector('#arxiv-mentions-chart');
+  chartEl.innerHTML = '';
+  const yearly = (arxivJson && arxivJson.yearly) || [];
+
+  const series = [
+    {
+      name: 'New papers / year',
+      type: 'column',
+      data: yearly.map(y => y.count),
+    },
+    {
+      name: 'Cumulative papers',
+      type: 'line',
+      data: yearly.map(y => y.cumulative),
+    },
+  ];
+  const categories = yearly.map(y => String(y.year));
+
+  const options = {
+    series,
+    chart: {
+      type: 'line',
+      height: getChartHeight(400),
+      toolbar: { show: true },
+      background: 'transparent',
+      stacked: false,
+    },
+    title: {
+      text: 'arXiv Papers Mentioning "Autoware" (Yearly)',
+      align: 'left',
+      style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
+    },
+    stroke: { width: [0, 3], curve: 'smooth' },
+    plotOptions: { bar: { borderRadius: 3, columnWidth: '55%' } },
+    dataLabels: { enabled: false },
+    xaxis: { categories },
+    yaxis: [
+      {
+        seriesName: 'New papers / year',
+        min: 0,
+        title: { text: 'New papers' },
+        labels: { formatter: formatNumber },
+      },
+      {
+        seriesName: 'Cumulative papers',
+        opposite: true,
+        min: 0,
+        title: { text: 'Cumulative' },
+        labels: { formatter: formatNumber },
+      },
+    ],
+    tooltip: { theme: 'dark', shared: true, y: { formatter: formatNumber } },
+    colors: COLORS.visibility,
+    legend: {
+      position: 'bottom', horizontalAlign: 'center',
+      fontSize: '12px', fontFamily: 'Outfit, sans-serif',
+      markers: { width: 10, height: 10, radius: 3 },
+    },
+    grid: { row: { opacity: 0 } },
+  };
+  new ApexCharts(chartEl, options).render();
+}
+
+function renderGoogleTrendsChart(trendsJson) {
+  const chartEl = document.querySelector('#google-trends-chart');
+  chartEl.innerHTML = '';
+  const monthly = (trendsJson && trendsJson.monthly) || [];
+
+  const series = [{
+    name: 'Search interest (0-100)',
+    data: monthly.map(m => [monthToDate(m.month).getTime(), m.interest]),
+  }];
+
+  const options = {
+    series,
+    chart: {
+      type: 'area',
+      height: getChartHeight(380),
+      toolbar: { show: true },
+      background: 'transparent',
+      zoom: { enabled: true },
+    },
+    title: {
+      text: 'Google Trends: "Autoware" Worldwide Search Interest (Monthly)',
+      align: 'left',
+      style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
+    },
+    subtitle: {
+      text: 'Relative interest (100 = peak month). Not absolute search volume.',
+      align: 'left',
+      style: { fontSize: '12px', fontFamily: 'Outfit, sans-serif', color: 'var(--text-muted)' },
+    },
+    stroke: { width: 2, curve: 'smooth' },
+    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05 } },
+    dataLabels: { enabled: false },
+    xaxis: { type: 'datetime' },
+    yaxis: { min: 0, max: 100, title: { text: 'Interest' } },
+    tooltip: { theme: 'dark', x: { format: 'MMM yyyy' } },
+    colors: [COLORS.visibility[0]],
+    grid: { row: { opacity: 0 } },
+  };
+  new ApexCharts(chartEl, options).render();
+}
+
+function renderVisibilityStats(arxivJson, citationsJson, trendsJson) {
+  const totalPapers = (arxivJson && arxivJson.total_papers) || 0;
+  const latestPaperYear = arxivJson?.yearly?.length
+    ? arxivJson.yearly[arxivJson.yearly.length - 1]
+    : null;
+  const totalCitations = (citationsJson && citationsJson.total_citations) || 0;
+  const latestTrend = trendsJson?.monthly?.length
+    ? trendsJson.monthly[trendsJson.monthly.length - 1]
+    : null;
+
+  const cards = [
+    createMetricCard('Search Interest (Latest)', latestTrend?.interest || 0, 'yellow', latestTrend?.month || 'N/A'),
+    createMetricCard('arXiv Papers (Total)', totalPapers, 'cyan', 'Mentioning "Autoware"'),
+    createMetricCard('New Papers (Latest Year)', latestPaperYear?.count || 0, 'cyan', latestPaperYear?.year ? String(latestPaperYear.year) : 'N/A'),
+    createMetricCard('Total Citations', totalCitations, 'coral', 'OpenAlex, all years'),
+  ];
+  renderMetricCards('visibility-stats', cards);
+}
+
+
+// =============================================================================
 // Rankings
 // =============================================================================
 
@@ -765,13 +901,26 @@ try {
 } catch { /* REPOSITORIES stays [] */ }
 
 // 2. Load data files in parallel
-const [starsResult, contributorsResult, rankingsResult, downloadsResult, commitsResult, activityResult] = await Promise.allSettled([
+const [
+  starsResult,
+  contributorsResult,
+  rankingsResult,
+  downloadsResult,
+  commitsResult,
+  activityResult,
+  arxivMentionsResult,
+  arxivCitationsResult,
+  googleTrendsResult,
+] = await Promise.allSettled([
   fetch('stars_history.json').then(r => r.json()),
   fetch('contributors_history.json').then(r => r.json()),
   fetch('rankings.json').then(r => r.json()),
   fetch('apt_downloads.json').then(r => r.json()),
   fetch('commits_history.json').then(r => r.json()),
   fetch('activity_history.json').then(r => r.json()),
+  fetch('arxiv_mentions_history.json').then(r => r.json()),
+  fetch('arxiv_citations_history.json').then(r => r.json()),
+  fetch('google_trends_history.json').then(r => r.json()),
 ]);
 
 // 3. Render each independently (error per section)
@@ -804,6 +953,22 @@ if (commitsResult.status === 'fulfilled') {
 } else {
   showError('#commits-chart', 'Commit history data not available');
 }
+
+const arxivMentions = arxivMentionsResult.status === 'fulfilled' ? arxivMentionsResult.value : null;
+const arxivCitations = arxivCitationsResult.status === 'fulfilled' ? arxivCitationsResult.value : null;
+const googleTrends = googleTrendsResult.status === 'fulfilled' ? googleTrendsResult.value : null;
+
+if (arxivMentions) {
+  renderArxivMentionsChart(arxivMentions);
+} else {
+  showError('#arxiv-mentions-chart', 'arXiv mentions data not available');
+}
+if (googleTrends) {
+  renderGoogleTrendsChart(googleTrends);
+} else {
+  showError('#google-trends-chart', 'Google Trends data not available');
+}
+renderVisibilityStats(arxivMentions, arxivCitations, googleTrends);
 
 if (rankingsResult.status === 'fulfilled') {
   rankingsData = rankingsResult.value;

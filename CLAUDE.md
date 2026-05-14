@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This repository tracks and visualizes contributor and stargazer metrics for Autoware Foundation repositories. It generates JSON data files from GitHub's GraphQL API and displays interactive charts on a GitHub Pages site showing:
 - GitHub star growth over time across repositories
 - Contributor growth (code contributors, community contributors, and total)
+- External visibility: arXiv mentions, citation counts (OpenAlex), and Google Trends search interest
 
 Live site: https://autowarefoundation.github.io/autoware-contributor-metrics/index.html
 
@@ -44,8 +45,17 @@ python scripts/calculate_activity_history.py
 # 8. Calculate contributor rankings
 python scripts/calculate_rankings.py
 
-# 9. Copy results to public folder
-cp results/contributors_history.json results/stars_history.json results/commits_history.json results/activity_history.json results/rankings.json public/
+# 9. Fetch arXiv papers mentioning Autoware (no token required)
+python scripts/get_arxiv_mentions.py
+
+# 10. Fetch citation counts from OpenAlex for the arXiv papers (no token required)
+python scripts/get_arxiv_citations.py
+
+# 11. Fetch Google Trends search interest (no token required; may fail intermittently)
+python scripts/get_google_trends.py
+
+# 12. Copy results to public folder
+cp results/contributors_history.json results/stars_history.json results/commits_history.json results/activity_history.json results/rankings.json results/arxiv_mentions_history.json results/arxiv_citations_history.json results/google_trends_history.json public/
 ```
 
 Alternatively, use the `GITHUB_TOKEN` environment variable instead of `--token`:
@@ -59,6 +69,8 @@ For incremental updates (faster, fetches only new data since last run):
 python scripts/get_contributors.py --use-cache
 python scripts/get_stargazers.py --use-cache
 python scripts/get_commits.py --use-cache
+python scripts/get_arxiv_mentions.py --use-cache
+python scripts/get_arxiv_citations.py --use-cache
 ```
 
 ### Installing dependencies
@@ -67,7 +79,7 @@ python scripts/get_commits.py --use-cache
 pip install -r requirements.txt
 ```
 
-The only external dependency is `requests>=2.31.0`.
+External dependencies: `requests>=2.31.0`, `pytrends>=4.9.2` (for Google Trends — pulls in `pandas` and `lxml` transitively).
 
 ### Viewing the dashboard locally
 
@@ -78,7 +90,7 @@ python -m http.server 8000
 # Visit http://localhost:8000/index.html
 ```
 
-The page expects `contributors_history.json`, `stars_history.json`, `commits_history.json`, `activity_history.json`, `rankings.json`, and `repositories.json` to be in the `public/` directory.
+The page expects `contributors_history.json`, `stars_history.json`, `commits_history.json`, `activity_history.json`, `rankings.json`, `repositories.json`, `arxiv_mentions_history.json`, `arxiv_citations_history.json`, and `google_trends_history.json` to be in the `public/` directory.
 
 ## Architecture
 
@@ -97,9 +109,40 @@ GitHub GraphQL API
 6. calculate_commits_history.py → results/commits_history.json
 7. calculate_activity_history.py → results/activity_history.json
 8. calculate_rankings.py → results/rankings.json
+9. get_arxiv_mentions.py → cache/raw_arxiv_data/papers.json + results/arxiv_mentions_history.json
+10. get_arxiv_citations.py → cache/raw_arxiv_data/openalex_works.json + results/arxiv_citations_history.json
+11. get_google_trends.py → results/google_trends_history.json
     ↓
 Copy to public/ → Visualized in index.html
 ```
+
+### External Visibility Pipeline
+
+Three additional fetchers do their own aggregation in-script (no separate
+calculate step):
+
+- **`get_arxiv_mentions.py`** — queries the arXiv Atom API for papers
+  containing "autoware" (`all:autoware`). Caches raw entries by arXiv ID and
+  produces a yearly time series of new submissions and cumulative count.
+  Pagination uses `submittedDate ascending` for stable ordering; the polite
+  delay between requests is 3.5s.
+
+- **`get_arxiv_citations.py`** — for each cached arXiv paper, looks up the
+  OpenAlex work via the arXiv DOI form (`10.48550/arXiv.<id>`). Stores the
+  slim record (cited_by_count, counts_by_year, publication_year) and aggregates
+  yearly citation totals across all papers. Set `OPENALEX_MAILTO` env var to
+  your email to use the OpenAlex polite pool (defaults to repo maintainer's
+  address). Yearly granularity is the finest OpenAlex offers; monthly trend is
+  not available from OpenAlex. Use `--use-cache` to only fetch new papers.
+
+- **`get_google_trends.py`** — queries Google Trends via `pytrends` for
+  worldwide monthly relative interest in the keyword `Autoware` since 2018.
+  Values are 0-100 normalized against the peak month, *not* absolute search
+  volume. Google rate-limits pytrends aggressively; on fetch failure the
+  script falls back to the most recent successful payload cached at
+  `cache/raw_google_trends_data/google_trends_history.json`, so the deployed
+  Pages artifact keeps showing the previous snapshot instead of dropping the
+  file. The workflow's `actions/cache` keys persist that cache between runs.
 
 ### Key Components
 

@@ -1,1 +1,2 @@
 requests>=2.31.0
+pytrends>=4.9.2
