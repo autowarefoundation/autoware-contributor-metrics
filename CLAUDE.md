@@ -123,7 +123,7 @@ calculate step):
 
 - **`get_arxiv_mentions.py`** — queries the arXiv Atom API for papers
   containing "autoware" (`all:autoware`). Caches raw entries by arXiv ID and
-  produces a per-month time series of new submissions and cumulative count.
+  produces a yearly time series of new submissions and cumulative count.
   Pagination uses `submittedDate ascending` for stable ordering; the polite
   delay between requests is 3.5s.
 
@@ -138,9 +138,11 @@ calculate step):
 - **`get_google_trends.py`** — queries Google Trends via `pytrends` for
   worldwide monthly relative interest in the keyword `Autoware` since 2018.
   Values are 0-100 normalized against the peak month, *not* absolute search
-  volume. Google may rate-limit or block requests intermittently; the workflow
-  swallows failures (`|| echo`) so the rest of the pipeline keeps running and
-  the previously-published JSON remains served.
+  volume. Google rate-limits pytrends aggressively; on fetch failure the
+  script falls back to the most recent successful payload cached at
+  `cache/raw_google_trends_data/google_trends_history.json`, so the deployed
+  Pages artifact keeps showing the previous snapshot instead of dropping the
+  file. The workflow's `actions/cache` keys persist that cache between runs.
 
 ### Key Components
 

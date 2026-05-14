@@ -5,10 +5,15 @@ Uses pytrends to query Google Trends for the worldwide monthly relative
 search interest for "Autoware". Values are normalized 0-100 against the
 peak month in the requested range, and represent relative search interest,
 not absolute search volume.
+
+Google rate-limits pytrends aggressively. On fetch failure this script falls
+back to the most recent successful payload cached under
+cache/raw_google_trends_data/, so the dashboard keeps showing the previous
+snapshot instead of dropping the file from the deployed Pages artifact.
 """
 
-import argparse
 import datetime
+import shutil
 import time
 from pathlib import Path
 
@@ -17,6 +22,9 @@ from pytrends.request import TrendReq
 from utils import write_json_output
 
 OUTPUT_FILE = "results/google_trends_history.json"
+CACHE_DIR = Path("cache/raw_google_trends_data")
+CACHE_FILE = CACHE_DIR / "google_trends_history.json"
+
 KEYWORD = "Autoware"
 START_DATE = "2018-01-01"
 GEO = ""  # worldwide
@@ -55,15 +63,30 @@ def fetch_trends(end_date: str) -> list[dict]:
     raise RuntimeError(f"Failed to fetch Google Trends data: {last_err}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch Google Trends data for Autoware")
-    args = parser.parse_args()
+def restore_from_cache(reason: str) -> bool:
+    """Copy the cached payload to OUTPUT_FILE. Returns True on success."""
+    if not CACHE_FILE.exists():
+        print(f"  No cached fallback at {CACHE_FILE} ({reason})")
+        return False
+    Path(OUTPUT_FILE).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(CACHE_FILE, OUTPUT_FILE)
+    print(f"  Restored previous Google Trends snapshot from cache ({reason})")
+    return True
 
+
+def main() -> None:
     today = datetime.date.today()
     end_date = today.strftime("%Y-%m-%d")
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"Fetching Google Trends for '{KEYWORD}' from {START_DATE} to {end_date}...")
-    rows = fetch_trends(end_date)
+    try:
+        rows = fetch_trends(end_date)
+    except Exception as e:
+        print(f"Fetch failed: {e}")
+        if restore_from_cache(reason=str(e)):
+            return
+        raise
 
     output = {
         "keyword": KEYWORD,
@@ -76,6 +99,7 @@ def main() -> None:
         ),
     }
     write_json_output(output, OUTPUT_FILE)
+    shutil.copyfile(OUTPUT_FILE, CACHE_FILE)
 
     print(f"\nDone! Generated {OUTPUT_FILE}")
     print(f"Months collected: {len(rows)}")

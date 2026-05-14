@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Fetch arXiv papers mentioning Autoware and aggregate monthly counts.
+"""Fetch arXiv papers mentioning Autoware and aggregate yearly counts.
 
 Queries the arXiv API for papers containing "autoware" in title, abstract,
-or full-text fields, caches the raw entries, and produces a monthly
-time-series of new submissions.
+or full-text fields, caches the raw entries, and produces a yearly
+time-series of new submissions plus a cumulative total.
 """
 
 import argparse

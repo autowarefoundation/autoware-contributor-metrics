@@ -11,7 +11,6 @@ import datetime
 import os
 import time
 from collections import defaultdict
-from pathlib import Path
 
 import requests
 

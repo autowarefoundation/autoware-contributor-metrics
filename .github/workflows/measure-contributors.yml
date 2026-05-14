@@ -62,7 +62,7 @@ jobs:
           python scripts/get_apt_downloads.py --use-cache
           python scripts/get_arxiv_mentions.py --use-cache
           python scripts/get_arxiv_citations.py --use-cache
-          python scripts/get_google_trends.py || echo "Google Trends fetch failed; keeping previous data"
+          python scripts/get_google_trends.py
           python scripts/calculate_contributor_history.py
           python scripts/calculate_stargazers_history.py
           python scripts/calculate_commits_history.py
@@ -76,7 +76,7 @@ jobs:
           cp results/apt_downloads.json public/
           cp results/arxiv_mentions_history.json public/
           cp results/arxiv_citations_history.json public/
-          [ -f results/google_trends_history.json ] && cp results/google_trends_history.json public/ || true
+          cp results/google_trends_history.json public/
 
       - name: Save cache
         uses: actions/cache/save@v4
