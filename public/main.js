@@ -440,14 +440,12 @@ function renderContributorsChart(json) {
         labels: { formatter: formatNumber },
       },
       {
-        seriesName: 'Total Unique Contributors',
+        seriesName: ['Total Unique Contributors', 'Code Contributors', 'Community Contributors'],
         opposite: true,
         min: 0,
         title: { text: 'Cumulative contributors' },
         labels: { formatter: formatNumber },
       },
-      { seriesName: 'Total Unique Contributors', show: false },
-      { seriesName: 'Total Unique Contributors', show: false },
     ],
     tooltip: { theme: 'dark', shared: true, y: { formatter: formatNumber } },
     colors: ['#FFE66D', ...COLORS.contributors],
@@ -1117,6 +1115,7 @@ if (starsResult.status === 'fulfilled') {
   renderStarsStats(starsResult.value);
 } else {
   showError('#stars-chart', 'Stars history data not available');
+  showError('#stars-yearly-chart', 'Stars history data not available');
 }
 
 if (contributorsResult.status === 'fulfilled') {
