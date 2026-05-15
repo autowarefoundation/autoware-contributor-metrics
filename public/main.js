@@ -134,6 +134,77 @@ function getChartHeight(base) {
   return base;
 }
 
+// Compute yearly new additions from a cumulative time-series.
+// `history` is an array of objects with {date: 'YYYY-MM-DD', [valueKey]: number}
+// sorted ascending. Returns [{year: 2022, new_count: N}, ...] using the last
+// observed cumulative value within each calendar year.
+function computeYearlyNew(history, valueKey) {
+  if (!history || history.length === 0) return [];
+  const lastByYear = {};
+  history.forEach(item => {
+    const y = new Date(item.date).getUTCFullYear();
+    lastByYear[y] = item[valueKey];
+  });
+  const years = Object.keys(lastByYear).map(Number).sort((a, b) => a - b);
+  const out = [];
+  let prev = 0;
+  years.forEach(y => {
+    const total = lastByYear[y];
+    out.push({ year: y, new_count: total - prev, cumulative: total });
+    prev = total;
+  });
+  return out;
+}
+
+function createYearlyComboOptions({ yearly, title, barName, lineName, color }) {
+  const categories = yearly.map(y => String(y.year));
+  return {
+    series: [
+      { name: barName, type: 'column', data: yearly.map(y => y.new_count) },
+      { name: lineName, type: 'line', data: yearly.map(y => y.cumulative) },
+    ],
+    chart: {
+      type: 'line',
+      height: getChartHeight(360),
+      toolbar: { show: true },
+      background: 'transparent',
+      stacked: false,
+    },
+    title: {
+      text: title,
+      align: 'left',
+      style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
+    },
+    stroke: { width: [0, 3], curve: 'smooth' },
+    plotOptions: { bar: { borderRadius: 3, columnWidth: '55%' } },
+    dataLabels: { enabled: false },
+    xaxis: { categories },
+    yaxis: [
+      {
+        seriesName: barName,
+        min: 0,
+        title: { text: barName },
+        labels: { formatter: formatNumber },
+      },
+      {
+        seriesName: lineName,
+        opposite: true,
+        min: 0,
+        title: { text: lineName },
+        labels: { formatter: formatNumber },
+      },
+    ],
+    tooltip: { theme: 'dark', shared: true, y: { formatter: formatNumber } },
+    colors: [color, '#FFE66D'],
+    legend: {
+      position: 'bottom', horizontalAlign: 'center',
+      fontSize: '12px', fontFamily: 'Outfit, sans-serif',
+      markers: { width: 10, height: 10, radius: 3 },
+    },
+    grid: { row: { opacity: 0 } },
+  };
+}
+
 // =============================================================================
 // Chart Configuration
 // =============================================================================
@@ -246,6 +317,21 @@ function renderStarsChart(json) {
   new ApexCharts(chartEl, options).render();
 }
 
+function renderStarsYearlyChart(json) {
+  const chartEl = document.querySelector('#stars-yearly-chart');
+  chartEl.innerHTML = '';
+  const yearly = computeYearlyNew(json.total_stars_history || [], 'star_count');
+  if (yearly.length === 0) return;
+  const options = createYearlyComboOptions({
+    yearly,
+    title: 'New Stars Per Year (with Cumulative Total)',
+    barName: 'New stars / year',
+    lineName: 'Cumulative stars',
+    color: COLORS.stars[0],
+  });
+  new ApexCharts(chartEl, options).render();
+}
+
 function renderStarsStats(json) {
   const latestEntry = getLastEntry(json.total_stars_history);
   const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
@@ -282,28 +368,94 @@ function renderContributorsChart(json) {
   const chartEl = document.querySelector('#contributors-chart');
   chartEl.innerHTML = '';
 
+  // Build yearly buckets from the full contributors history; take the last
+  // observed cumulative value within each calendar year as that year's snapshot.
+  const total = json.autoware_contributors || [];
+  const code = json.autoware_code_contributors || [];
+  const community = json.autoware_community_contributors || [];
+
+  const yearSet = new Set();
+  [total, code, community].forEach(arr => arr.forEach(item => {
+    yearSet.add(new Date(item.date).getUTCFullYear());
+  }));
+  const years = [...yearSet].sort((a, b) => a - b);
+
+  function lastValueByYear(history, valueKey) {
+    const map = {};
+    history.forEach(item => {
+      const y = new Date(item.date).getUTCFullYear();
+      map[y] = item[valueKey];
+    });
+    // Forward-fill years where this series had no observation (carry the prior
+    // cumulative value so the line stays monotonic across the full timeline).
+    const out = [];
+    let prev = null;
+    years.forEach(y => {
+      if (map[y] !== undefined) prev = map[y];
+      out.push(prev);
+    });
+    return out;
+  }
+
+  const totalByYear = lastValueByYear(total, 'contributors_count');
+  // New contributors per year = year-over-year delta of the cumulative total.
+  const newPerYear = totalByYear.map((v, i) => {
+    if (v === null) return 0;
+    const prev = i === 0 ? 0 : (totalByYear[i - 1] ?? 0);
+    return v - prev;
+  });
+
   const series = [
-    {
-      name: 'Total Unique Contributors',
-      data: mapToChartData(json.autoware_contributors, 'contributors_count'),
-    },
-    {
-      name: 'Code Contributors',
-      data: mapToChartData(json.autoware_code_contributors, 'contributors_count'),
-    },
-    {
-      name: 'Community Contributors',
-      data: mapToChartData(json.autoware_community_contributors, 'contributors_count'),
-    },
+    { name: 'New contributors / year', type: 'column', data: newPerYear },
+    { name: 'Total Unique Contributors', type: 'line', data: totalByYear },
+    { name: 'Code Contributors', type: 'line', data: lastValueByYear(code, 'contributors_count') },
+    { name: 'Community Contributors', type: 'line', data: lastValueByYear(community, 'contributors_count') },
   ];
 
-  const options = createChartOptions({
+  const options = {
     series,
-    title: 'Contributor Growth Over Time',
-    yAxisTitle: 'Number of Contributors',
-    colors: COLORS.contributors,
-    showLegend: true,
-  });
+    chart: {
+      type: 'line',
+      height: getChartHeight(420),
+      stacked: false,
+      zoom: { enabled: false },
+      background: 'transparent',
+      toolbar: { show: true },
+    },
+    title: {
+      text: 'Contributor Growth Over Time',
+      align: 'left',
+      style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
+    },
+    stroke: { width: [0, 3, 2, 2], curve: 'smooth' },
+    plotOptions: { bar: { borderRadius: 4, columnWidth: '60%' } },
+    markers: { size: [0, 4, 3, 3] },
+    dataLabels: { enabled: false },
+    xaxis: { categories: years.map(String) },
+    yaxis: [
+      {
+        seriesName: 'New contributors / year',
+        min: 0,
+        title: { text: 'New contributors / year' },
+        labels: { formatter: formatNumber },
+      },
+      {
+        seriesName: ['Total Unique Contributors', 'Code Contributors', 'Community Contributors'],
+        opposite: true,
+        min: 0,
+        title: { text: 'Cumulative contributors' },
+        labels: { formatter: formatNumber },
+      },
+    ],
+    tooltip: { theme: 'dark', shared: true, y: { formatter: formatNumber } },
+    colors: ['#FFE66D', ...COLORS.contributors],
+    legend: {
+      position: 'bottom', horizontalAlign: 'center',
+      fontSize: '12px', fontFamily: 'Outfit, sans-serif',
+      markers: { width: 10, height: 10, radius: 3 },
+    },
+    grid: { row: { opacity: 0 } },
+  };
 
   new ApexCharts(chartEl, options).render();
 }
@@ -313,7 +465,7 @@ function renderContributorsStats(json) {
   const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
 
   const cards = [
-    createMetricCard('Total Contributors', latestEntry?.contributors_count || 0, 'cyan', `Updated ${date}`),
+    createMetricCard('Total Unique Contributors', latestEntry?.contributors_count || 0, 'cyan', `Updated ${date}`),
     createMetricCard('Code Contributors', getLastEntry(json.autoware_code_contributors)?.contributors_count || 0, 'coral'),
     createMetricCard('Community Contributors', getLastEntry(json.autoware_community_contributors)?.contributors_count || 0, 'teal'),
   ];
@@ -329,12 +481,10 @@ function renderDownloadsChart(json) {
   const chartEl = document.querySelector('#downloads-chart');
   chartEl.textContent = '';
 
-  const cumulative = json.cumulative;
+  // Stacked area: Humble + Jazzy + Rolling sums to Total at each point.
+  // Restrict the displayed window to 2024-01 onward.
+  const cumulative = (json.cumulative || []).filter(item => item.date >= '2024-01');
   const series = [
-    {
-      name: 'Total',
-      data: cumulative.map(item => [new Date(item.date + '-01'), item.total]),
-    },
     {
       name: 'Humble',
       data: cumulative.map(item => [new Date(item.date + '-01'), item.humble]),
@@ -349,13 +499,48 @@ function renderDownloadsChart(json) {
     },
   ];
 
-  const options = createChartOptions({
+  const options = {
     series,
-    title: 'APT Package Download Growth (Cumulative)',
-    yAxisTitle: 'Total Downloads',
-    colors: COLORS.downloads,
-    showLegend: true,
-  });
+    chart: {
+      type: 'area',
+      height: getChartHeight(400),
+      stacked: true,
+      zoom: { enabled: true },
+      background: 'transparent',
+      toolbar: { show: true },
+    },
+    title: {
+      text: 'APT Package Download Growth (Cumulative, Stacked by Distro)',
+      align: 'left',
+      style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
+    },
+    dataLabels: { enabled: false },
+    stroke: { width: 2, curve: 'smooth' },
+    fill: {
+      type: 'gradient',
+      gradient: { shadeIntensity: 1, opacityFrom: 0.55, opacityTo: 0.15 },
+    },
+    xaxis: { type: 'datetime' },
+    yaxis: {
+      min: 0,
+      title: { text: 'Total Downloads' },
+      labels: { formatter: formatNumber },
+    },
+    tooltip: {
+      theme: 'dark',
+      shared: true,
+      y: { formatter: formatNumber },
+    },
+    colors: ['#FF6B6B', '#4ECDC4', '#FFE66D'],
+    legend: {
+      position: 'bottom',
+      horizontalAlign: 'center',
+      fontSize: '12px',
+      fontFamily: 'Outfit, sans-serif',
+      markers: { width: 10, height: 10, radius: 3 },
+    },
+    grid: { row: { opacity: 0 } },
+  };
 
   new ApexCharts(chartEl, options).render();
 }
@@ -471,24 +656,24 @@ function renderCommitsChart(commitsJson, activityJson) {
   const prHistory = activityJson ? (activityJson.total_merged_prs_history || []) : [];
   const issueHistory = activityJson ? (activityJson.total_resolved_issues_history || []) : [];
 
-  // Merge quarters from all series
-  const quarterSet = new Set();
-  commitHistory.forEach(item => quarterSet.add(item.quarter));
-  prHistory.forEach(item => quarterSet.add(item.quarter));
-  issueHistory.forEach(item => quarterSet.add(item.quarter));
-  const categories = Array.from(quarterSet).sort();
+  // Merge years from all series
+  const yearSet = new Set();
+  commitHistory.forEach(item => yearSet.add(item.year));
+  prHistory.forEach(item => yearSet.add(item.year));
+  issueHistory.forEach(item => yearSet.add(item.year));
+  const categories = Array.from(yearSet).sort();
 
   const commitMap = {};
-  commitHistory.forEach(item => { commitMap[item.quarter] = item.commit_count; });
+  commitHistory.forEach(item => { commitMap[item.year] = item.commit_count; });
   const prMap = {};
-  prHistory.forEach(item => { prMap[item.quarter] = item.merged_pr_count; });
+  prHistory.forEach(item => { prMap[item.year] = item.merged_pr_count; });
   const issueMap = {};
-  issueHistory.forEach(item => { issueMap[item.quarter] = item.resolved_issue_count; });
+  issueHistory.forEach(item => { issueMap[item.year] = item.resolved_issue_count; });
 
   const series = [
-    { name: 'Commits', data: categories.map(q => commitMap[q] || 0) },
-    { name: 'Merged PRs', data: categories.map(q => prMap[q] || 0) },
-    { name: 'Resolved Issues', data: categories.map(q => issueMap[q] || 0) },
+    { name: 'Commits', data: categories.map(y => commitMap[y] || 0) },
+    { name: 'Merged PRs', data: categories.map(y => prMap[y] || 0) },
+    { name: 'Resolved Issues', data: categories.map(y => issueMap[y] || 0) },
   ];
 
   const options = {
@@ -500,7 +685,7 @@ function renderCommitsChart(commitsJson, activityJson) {
       background: 'transparent',
     },
     title: {
-      text: 'Quarterly Activity (All Repositories)',
+      text: 'Yearly Activity (All Repositories)',
       align: 'left',
       style: { fontSize: '16px', fontFamily: 'Outfit, sans-serif', fontWeight: 600 },
     },
@@ -553,11 +738,11 @@ function renderCommitsStats(commitsJson, activityJson) {
 
   const cards = [
     createMetricCard('Total Commits', totalCommits, 'cyan', 'Since 2022'),
-    createMetricCard('Latest Quarter Commits', latestCommit?.commit_count || 0, 'cyan', latestCommit?.quarter || 'N/A'),
+    createMetricCard('Latest Year Commits', latestCommit?.commit_count || 0, 'cyan', latestCommit?.year || 'N/A'),
     createMetricCard('Total Merged PRs', totalPRs, 'coral', 'Since 2022'),
-    createMetricCard('Latest Quarter Merged PRs', latestPR?.merged_pr_count || 0, 'coral', latestPR?.quarter || 'N/A'),
+    createMetricCard('Latest Year Merged PRs', latestPR?.merged_pr_count || 0, 'coral', latestPR?.year || 'N/A'),
     createMetricCard('Total Resolved Issues', totalIssues, 'teal', 'Since 2022'),
-    createMetricCard('Latest Quarter Resolved Issues', latestIssue?.resolved_issue_count || 0, 'teal', latestIssue?.quarter || 'N/A'),
+    createMetricCard('Latest Year Resolved Issues', latestIssue?.resolved_issue_count || 0, 'teal', latestIssue?.year || 'N/A'),
   ];
 
   renderMetricCards('commits-stats', cards);
@@ -926,9 +1111,11 @@ const [
 // 3. Render each independently (error per section)
 if (starsResult.status === 'fulfilled') {
   renderStarsChart(starsResult.value);
+  renderStarsYearlyChart(starsResult.value);
   renderStarsStats(starsResult.value);
 } else {
   showError('#stars-chart', 'Stars history data not available');
+  showError('#stars-yearly-chart', 'Stars history data not available');
 }
 
 if (contributorsResult.status === 'fulfilled') {
