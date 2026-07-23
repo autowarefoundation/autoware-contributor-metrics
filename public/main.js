@@ -130,6 +130,9 @@ function getRepoStarsSorted(json) {
 }
 
 function mapToChartData(dataArray, valueKey) {
+  // A missing series must degrade to an empty line, never throw: this function
+  // runs inside chart builders, and one throw there blanks the whole page.
+  if (!Array.isArray(dataArray)) return [];
   return dataArray.map((item) => [new Date(item.date), item[valueKey]]);
 }
 
@@ -303,12 +306,18 @@ function renderStarsChart(json) {
     },
   ];
 
-  getRepoStarsSorted(json).forEach(({ repo }, index) => {
-    series.push({
-      name: `${rankPrefix(index + 1)} ${repo}`,
-      data: mapToChartData(json[`${repo}_stars_history`], 'star_count'),
+  getRepoStarsSorted(json)
+    // Only repositories with an actual history series can be plotted. Some are
+    // known only by their current count, because GitHub cannot enumerate their
+    // stargazers (see CLAUDE.md). Those still appear in the Top Repositories
+    // ranking, but there is no series to draw for them here.
+    .filter(({ repo }) => Array.isArray(json[`${repo}_stars_history`]))
+    .forEach(({ repo }, index) => {
+      series.push({
+        name: `${rankPrefix(index + 1)} ${repo}`,
+        data: mapToChartData(json[`${repo}_stars_history`], 'star_count'),
+      });
     });
-  });
 
   const options = createChartOptions({
     series,
@@ -1122,34 +1131,55 @@ const [
 ]);
 
 // 3. Render each independently (error per section)
+//
+// `allSettled` above only isolates *fetch* failures. A render that throws would
+// still abort every section after it and leave the page blank, so each section
+// is wrapped too — the isolation this comment promises has to cover both.
+function safeRender(label, selector, render) {
+  try {
+    render();
+  } catch (e) {
+    console.error(`Failed to render ${label}:`, e);
+    if (selector) showError(selector, `${label} could not be rendered`);
+  }
+}
+
 if (starsResult.status === 'fulfilled') {
-  renderStarsChart(starsResult.value);
-  renderStarsYearlyChart(starsResult.value);
-  renderStarsStats(starsResult.value);
+  safeRender('Stars', '#stars-chart', () => {
+    renderStarsChart(starsResult.value);
+    renderStarsYearlyChart(starsResult.value);
+    renderStarsStats(starsResult.value);
+  });
 } else {
   showError('#stars-chart', 'Stars history data not available');
   showError('#stars-yearly-chart', 'Stars history data not available');
 }
 
 if (contributorsResult.status === 'fulfilled') {
-  renderContributorsChart(contributorsResult.value);
-  renderContributorsStats(contributorsResult.value);
+  safeRender('Contributors', '#contributors-chart', () => {
+    renderContributorsChart(contributorsResult.value);
+    renderContributorsStats(contributorsResult.value);
+  });
 } else {
   showError('#contributors-chart', 'Contributor history data not available');
 }
 
 if (downloadsResult.status === 'fulfilled') {
-  renderDownloadsChart(downloadsResult.value);
-  renderDownloadsRanking(downloadsResult.value);
-  renderDownloadsStats(downloadsResult.value);
+  safeRender('APT downloads', '#downloads-chart', () => {
+    renderDownloadsChart(downloadsResult.value);
+    renderDownloadsRanking(downloadsResult.value);
+    renderDownloadsStats(downloadsResult.value);
+  });
 } else {
   showError('#downloads-chart', 'APT download data not available');
 }
 
 if (commitsResult.status === 'fulfilled') {
   const activityData = activityResult.status === 'fulfilled' ? activityResult.value : null;
-  renderCommitsChart(commitsResult.value, activityData);
-  renderCommitsStats(commitsResult.value, activityData);
+  safeRender('Activity', '#commits-chart', () => {
+    renderCommitsChart(commitsResult.value, activityData);
+    renderCommitsStats(commitsResult.value, activityData);
+  });
 } else {
   showError('#commits-chart', 'Commit history data not available');
 }
@@ -1159,16 +1189,16 @@ const arxivCitations = arxivCitationsResult.status === 'fulfilled' ? arxivCitati
 const googleTrends = googleTrendsResult.status === 'fulfilled' ? googleTrendsResult.value : null;
 
 if (arxivMentions) {
-  renderArxivMentionsChart(arxivMentions);
+  safeRender('arXiv mentions', '#arxiv-mentions-chart', () => renderArxivMentionsChart(arxivMentions));
 } else {
   showError('#arxiv-mentions-chart', 'arXiv mentions data not available');
 }
 if (googleTrends) {
-  renderGoogleTrendsChart(googleTrends);
+  safeRender('Google Trends', '#google-trends-chart', () => renderGoogleTrendsChart(googleTrends));
 } else {
   showError('#google-trends-chart', 'Google Trends data not available');
 }
-renderVisibilityStats(arxivMentions, arxivCitations, googleTrends);
+safeRender('Visibility stats', null, () => renderVisibilityStats(arxivMentions, arxivCitations, googleTrends));
 
 if (rankingsResult.status === 'fulfilled') {
   rankingsData = rankingsResult.value;
