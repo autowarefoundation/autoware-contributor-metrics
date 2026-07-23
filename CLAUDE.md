@@ -270,6 +270,14 @@ When using `--use-cache`, fetcher scripts:
   is deterministic and reproducible, **not** transient, so retrying cannot fix
   it; these repos rely entirely on their cached stargazer data. This is why the
   cache must never be discarded (see "Full re-fetch mode" above).
+  As a partial mitigation `get_stargazers.py` records the scalar
+  `stargazerCount` for every repository into
+  `cache/raw_stargazer_data/current_counts.json`, which
+  `calculate_stargazers_history.py` exposes as `current_star_counts` /
+  `total_current_stars`. That keeps an accurate *current* number for these
+  repos, but their per-date history cannot be rebuilt. These counts are
+  deliberately **not** added to `total_stars_history`: that series counts
+  unique *people*, and a bare count carries no identities to deduplicate by.
 - **Discussions are special-cased**: Only the `autoware` repo's discussions are fetched (hardcoded in `get_contributors.py`), not all repos.
 - **Comments/reviews capped at 100 per item**: GraphQL queries use `first:100` for comments and reviews — items with more will be truncated.
 - **`repositories.py` fails silently**: If `public/repositories.json` doesn't exist at import time, `REPOSITORIES` becomes an empty list with only a printed warning. Scripts will process zero repos.

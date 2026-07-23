@@ -92,6 +92,18 @@ def main():
     total_history = analyzer.generate_total_history(all_stargazers_info)
     output_data["total_stars_history"] = total_history
 
+    # Current per-repository star counts, from the `stargazerCount` scalar.
+    # These cover every repository, including the ones whose stargazer list
+    # GitHub cannot enumerate and which therefore have no history above. They
+    # are deliberately NOT folded into total_stars_history: that series counts
+    # unique *people*, and a bare count carries no identities to deduplicate by.
+    counts = load_json_file("cache/raw_stargazer_data/current_counts.json")
+    if isinstance(counts, dict) and counts:
+        output_data["current_star_counts"] = counts
+        output_data["total_current_stars"] = sum(counts.values())
+        print(f"Current star counts: {len(counts)} repositories, "
+              f"{sum(counts.values())} stars total (sum, not unique)")
+
     # Calculate unique stargazer count
     unique_count = len(set(
         username for stargazers_info in all_stargazers_info

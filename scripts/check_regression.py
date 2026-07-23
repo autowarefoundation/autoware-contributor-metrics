@@ -45,7 +45,7 @@ class Violation(NamedTuple):
 
 # Metrics whose value is a count of series/repositories: any decrease is a bug,
 # so they are compared with zero tolerance.
-COUNT_METRICS = {"repo_series"}
+COUNT_METRICS = {"repo_series", "current_count_repos"}
 
 
 def _last(series: Any, field: str) -> float:
@@ -67,13 +67,17 @@ def metrics_for(filename: str, data: Any) -> Dict[str, float]:
         return {}
 
     if filename == "stars_history.json":
-        return {
+        metrics = {
             "repo_series": sum(
                 1 for k in data
                 if k.endswith("_stars_history") and k != "total_stars_history"
             ),
             "total_stars": _last(data.get("total_stars_history"), "star_count"),
         }
+        if isinstance(data.get("current_star_counts"), dict):
+            metrics["current_count_repos"] = len(data["current_star_counts"])
+            metrics["total_current_stars"] = data.get("total_current_stars", 0)
+        return metrics
     if filename == "commits_history.json":
         return {"repo_series": sum(1 for k in data if k.endswith("_commits_history"))}
     if filename == "activity_history.json":

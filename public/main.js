@@ -115,12 +115,17 @@ function rankPrefix(rank) {
 }
 
 function getRepoStarsSorted(json) {
+  const current = json.current_star_counts || {};
   return REPOSITORIES
-    .filter(repo => json[`${repo}_stars_history`])
     .map(repo => {
+      // Prefer the authoritative current count. It also covers repositories
+      // whose stargazer list GitHub cannot enumerate, which have no history
+      // series at all and would otherwise be missing from this ranking.
+      if (Number.isFinite(current[repo])) return { repo, starCount: current[repo] };
       const lastEntry = getLastEntry(json[`${repo}_stars_history`]);
-      return { repo, starCount: lastEntry ? lastEntry.star_count : 0 };
+      return lastEntry ? { repo, starCount: lastEntry.star_count } : null;
     })
+    .filter(Boolean)
     .sort((a, b) => b.starCount - a.starCount);
 }
 
@@ -338,7 +343,15 @@ function renderStarsStats(json) {
 
   const cards = [];
 
-  cards.push(createMetricCard('Total Unique Stars', latestEntry?.star_count || 0, 'cyan', `Updated ${date}`));
+  cards.push(createMetricCard('Total Unique Stars', latestEntry?.star_count || 0, 'cyan', `Unique people, updated ${date}`));
+
+  // Sum of per-repository counts. Higher than the unique figure because one
+  // person starring several repositories is counted once per repository, and
+  // it also includes repositories whose stargazer list cannot be enumerated.
+  if (Number.isFinite(json.total_current_stars)) {
+    cards.push(createMetricCard('Total Stars', json.total_current_stars, 'gold',
+      'Sum across repositories'));
+  }
 
   // Top repos card
   const topRepos = getRepoStarsSorted(json).slice(0, 10);
