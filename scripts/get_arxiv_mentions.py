@@ -8,6 +8,7 @@ time-series of new submissions plus a cumulative total.
 
 import argparse
 import datetime
+import os
 import time
 import xml.etree.ElementTree as ET
 from collections import defaultdict
@@ -30,8 +31,36 @@ MAX_RETRIES = 5
 START_MONTH = "2018-01"
 
 
-def fetch_page(start: int, max_results: int) -> str:
-    """Fetch one page of results from arXiv API. Returns Atom XML text."""
+def build_session() -> requests.Session:
+    """Build a session with a descriptive User-Agent.
+
+    arXiv rate-limits the default ``python-requests`` User-Agent aggressively;
+    identifying the client (project + contact) makes 429s far less frequent.
+    """
+    s = requests.Session()
+    mailto = os.environ.get("ARXIV_MAILTO", "yutaka.kondo@youtalk.jp")
+    s.headers["User-Agent"] = f"autoware-contributor-metrics (mailto:{mailto})"
+    return s
+
+
+def _retry_after_seconds(resp: requests.Response | None, default: float) -> float:
+    """Return the server-requested backoff from a Retry-After header, else default."""
+    if resp is None:
+        return default
+    value = resp.headers.get("Retry-After")
+    if value:
+        try:
+            return max(float(value), default)
+        except ValueError:
+            pass
+    return default
+
+
+def fetch_page(session: requests.Session, start: int, max_results: int) -> str:
+    """Fetch one page of results from arXiv API. Returns Atom XML text.
+
+    Raises RuntimeError if every retry is exhausted (e.g. persistent 429).
+    """
     params = {
         "search_query": SEARCH_QUERY,
         "start": start,
@@ -41,11 +70,15 @@ def fetch_page(start: int, max_results: int) -> str:
     }
     for attempt in range(MAX_RETRIES):
         try:
-            resp = requests.get(ARXIV_API_URL, params=params, timeout=60)
+            resp = session.get(ARXIV_API_URL, params=params, timeout=60)
             resp.raise_for_status()
             return resp.text
         except requests.exceptions.RequestException as e:
+            if attempt == MAX_RETRIES - 1:
+                break
             wait = 2 ** attempt * REQUEST_DELAY_SEC
+            if getattr(e, "response", None) is not None and e.response.status_code in (429, 503):
+                wait = _retry_after_seconds(e.response, wait)
             print(f"  Error (attempt {attempt + 1}): {e}. Retrying in {wait:.1f}s...")
             time.sleep(wait)
     raise RuntimeError(f"Failed to fetch arXiv page at start={start} after {MAX_RETRIES} retries")
@@ -80,13 +113,23 @@ def parse_entries(xml_text: str) -> list[dict]:
     return entries
 
 
-def fetch_all(known_ids: set[str]) -> list[dict]:
-    """Fetch all matching entries, skipping those already in known_ids when possible."""
+def fetch_all(session: requests.Session, known_ids: set[str]) -> list[dict]:
+    """Fetch all matching entries, skipping those already in known_ids when possible.
+
+    On a persistent fetch failure (e.g. arXiv 429 rate-limiting) this returns the
+    entries collected so far instead of raising, so the caller can fall back to the
+    existing cache and keep the pipeline running.
+    """
     all_entries: list[dict] = []
     start = 0
     while True:
         print(f"Fetching arXiv start={start}...")
-        xml_text = fetch_page(start, PAGE_SIZE)
+        try:
+            xml_text = fetch_page(session, start, PAGE_SIZE)
+        except RuntimeError as e:
+            print(f"  {e}")
+            print("  arXiv unavailable; continuing with data collected so far.")
+            break
         entries = parse_entries(xml_text)
         if not entries:
             print("  No more entries.")
@@ -149,11 +192,17 @@ def main() -> None:
     known_ids = set(cached_by_id.keys())
     print(f"Loaded {len(known_ids)} cached papers")
 
-    fetched = fetch_all(known_ids)
+    session = build_session()
+    fetched = fetch_all(session, known_ids)
     for e in fetched:
         cached_by_id[e["arxiv_id"]] = e
 
     papers = sorted(cached_by_id.values(), key=lambda x: x.get("published", ""))
+    if not papers:
+        # Nothing cached and the fetch failed: don't clobber an existing output
+        # with an empty one — leave the previous snapshot in place.
+        print("No papers available (empty cache and fetch failed); keeping any existing output.")
+        return
     write_json_output(papers, CACHE_FILE)
     print(f"Cached {len(papers)} total papers")
 
