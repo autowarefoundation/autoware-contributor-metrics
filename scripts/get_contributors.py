@@ -1,31 +1,10 @@
 import sys
 import argparse
-from typing import List, Dict, Optional
+from typing import List, Dict
 from repositories import REPOSITORIES
 from github_client import GitHubGraphQLClient, fetch_with_cache
 
 CACHE_DIR = "cache/raw_contributor_data"
-
-
-def get_first_cursor(client: GitHubGraphQLClient, contributor_type: str, repository: str) -> Optional[str]:
-    """Get the first cursor for a repository and contributor type"""
-    query = f"""
-    query($repository: String!) {{
-        repository(owner:"autowarefoundation", name:$repository) {{
-            {contributor_type}(first:1) {{
-                edges {{
-                    cursor
-                }}
-            }}
-        }}
-    }}
-    """
-
-    data = client.execute_query(query, {"repository": repository})
-    edges = data["data"]["repository"][contributor_type]["edges"]
-    if not edges:
-        return None
-    return edges[0]["cursor"]
 
 
 def get_contributors(client: GitHubGraphQLClient, contributor_type: str, repository: str, start_cursor: str = None) -> List[Dict]:
@@ -42,15 +21,10 @@ def get_contributors(client: GitHubGraphQLClient, contributor_type: str, reposit
     else:
         print(f"Retrieving {contributor_type} for {repository}...")
 
-    # Use provided cursor or get the first one
-    if start_cursor:
-        cursor = start_cursor
-    else:
-        cursor = get_first_cursor(client, contributor_type, repository)
-        if cursor is None:
-            print(f"No {contributor_type} found for {repository}")
-            return []
-
+    # `after: null` starts at the very first item. Seeding this with the first
+    # item's own cursor would silently skip that item, because `after` is
+    # exclusive.
+    cursor = start_cursor
     all_edges = []
     page_count = 0
 
@@ -77,7 +51,7 @@ def get_contributors(client: GitHubGraphQLClient, contributor_type: str, reposit
                         closedAt"""
 
     query = f"""
-    query($cursor: String!, $repository: String!) {{
+    query($cursor: String, $repository: String!) {{
         repository(owner:"autowarefoundation", name:$repository) {{
             {contributor_type}(first:100, after: $cursor) {{
                 totalCount
@@ -106,18 +80,16 @@ def get_contributors(client: GitHubGraphQLClient, contributor_type: str, reposit
     }}
     """
 
-    while cursor:
+    while True:
         print(f"Fetching page {page_count + 1} for {repository} {contributor_type}...")
         data = client.execute_query(query, {"cursor": cursor, "repository": repository})
 
         edges = data["data"]["repository"][contributor_type]["edges"]
+        if not edges:
+            break
         all_edges.extend(edges)
         page_count += 1
-
-        if len(edges) > 0:
-            cursor = edges[-1]["cursor"]
-        else:
-            cursor = None
+        cursor = edges[-1]["cursor"]
 
     print(f"Retrieved {len(all_edges)} {contributor_type} for {repository}")
     return all_edges

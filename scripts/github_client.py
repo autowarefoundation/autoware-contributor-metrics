@@ -1,16 +1,49 @@
 import os
-import sys
 import json
 import time
+import random
 import requests
 from typing import Any, Callable, Dict, List, Optional
 from pathlib import Path
 
 
+# Substrings that mark a GitHub GraphQL error as transient (server-side hiccup,
+# query timeout, temporary unavailability) and therefore worth retrying. GitHub
+# emits "Something went wrong while executing your query ... Please include
+# <id> when reporting this issue" for these, especially on expensive paginated
+# queries during a full (cache-cleared) fetch. Matched case-insensitively
+# against both the error message and its `type`.
+_TRANSIENT_GRAPHQL_MARKERS = (
+    "something went wrong",
+    "timeout",
+    "timed out",
+    "temporarily unavailable",
+    "service unavailable",
+    "service_unavailable",
+    "internal error",
+    "bad gateway",
+    "try again",
+)
+
+
+def _looks_transient(text: str) -> bool:
+    """Return True if *text* matches a known transient GraphQL error signature."""
+    lowered = text.lower()
+    return any(marker in lowered for marker in _TRANSIENT_GRAPHQL_MARKERS)
+
+
 class GitHubGraphQLClient:
     """Shared client for interacting with GitHub GraphQL API"""
 
-    def __init__(self, token: str = None):
+    def __init__(
+        self,
+        token: str = None,
+        max_retries: int = 6,
+        base_backoff: float = 2.0,
+        max_backoff: float = 60.0,
+        backoff_jitter: float = 1.0,
+        request_delay: float = 1.0,
+    ):
         self.token = token or os.getenv("GITHUB_TOKEN")
         if not self.token:
             raise ValueError(
@@ -18,7 +51,16 @@ class GitHubGraphQLClient:
             )
         self.base_url = "https://api.github.com/graphql"
         self.headers = {"Authorization": f"Bearer {self.token}"}
-        self.rate_limit_wait = 1  # seconds between requests
+        self.max_retries = max_retries
+        self.base_backoff = base_backoff
+        self.max_backoff = max_backoff
+        self.backoff_jitter = backoff_jitter
+        self.rate_limit_wait = request_delay  # seconds between successful requests
+
+    def _backoff_seconds(self, attempt: int) -> float:
+        """Capped exponential backoff with jitter for retry attempt *attempt*."""
+        capped = min(self.base_backoff * (2 ** attempt), self.max_backoff)
+        return capped + random.uniform(0, self.backoff_jitter)
 
     def execute_query(self, query: str, variables: Dict[str, Any] = None) -> Dict[str, Any]:
         """Execute a GraphQL query with rate limiting and error handling"""
@@ -26,8 +68,7 @@ class GitHubGraphQLClient:
         if variables:
             payload["variables"] = variables
 
-        max_retries = 5
-        retry_delay = 1
+        max_retries = self.max_retries
         for attempt in range(max_retries):
             try:
                 resp = requests.post(
@@ -67,16 +108,21 @@ class GitHubGraphQLClient:
                 # Check for GraphQL errors
                 if 'errors' in data:
                     error_messages = [err.get('message', 'Unknown error') for err in data['errors']]
-                    if 'rate limit' in str(error_messages).lower():
+                    error_types = [err.get('type', '') for err in data['errors']]
+                    probe = f"{error_messages} {error_types}".lower()
+                    is_rate_limit = 'rate limit' in probe
+                    # Rate-limit and transient server errors are both worth
+                    # retrying; permanent errors (bad query, NOT_FOUND, ...) are
+                    # not and must fail fast so the caller can move on.
+                    if is_rate_limit or _looks_transient(probe):
+                        kind = "rate limit" if is_rate_limit else "transient"
                         if attempt < max_retries - 1:
-                            wait_time = retry_delay * (2 ** attempt)
-                            print(f"GraphQL rate limit error. Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}...")
+                            wait_time = self._backoff_seconds(attempt)
+                            print(f"GraphQL {kind} error. Waiting {wait_time:.1f}s before retry {attempt + 1}/{max_retries}: {error_messages}")
                             time.sleep(wait_time)
                             continue
-                        else:
-                            raise Exception(f"Rate limit exceeded after {max_retries} retries: {error_messages}")
-                    else:
-                        raise Exception(f"GraphQL errors: {error_messages}")
+                        raise Exception(f"GraphQL {kind} error after {max_retries} retries: {error_messages}")
+                    raise Exception(f"GraphQL errors: {error_messages}")
 
                 # Add small delay between requests to avoid hitting rate limits
                 time.sleep(self.rate_limit_wait)
@@ -85,12 +131,14 @@ class GitHubGraphQLClient:
 
             except requests.exceptions.RequestException as e:
                 if attempt < max_retries - 1:
-                    print(f"Request failed: {e}. Retrying in {retry_delay * (2 ** attempt)} seconds...")
-                    time.sleep(retry_delay * (2 ** attempt))
+                    wait_time = self._backoff_seconds(attempt)
+                    print(f"Request failed: {e}. Retrying in {wait_time:.1f}s...")
+                    time.sleep(wait_time)
                     continue
-                else:
-                    print(f"Request failed after {max_retries} attempts: {e}")
-                    sys.exit(1)
+                # Give up on this request. Raise (rather than sys.exit) so callers
+                # that wrap per-repo work in try/except can skip just this repo
+                # instead of the whole pipeline dying on one flaky request.
+                raise Exception(f"Request failed after {max_retries} attempts: {e}")
 
         # This should never be reached, but just in case
         raise Exception("Unexpected error in execute_query")

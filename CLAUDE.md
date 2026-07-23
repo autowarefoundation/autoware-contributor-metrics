@@ -193,10 +193,34 @@ The `repositories.py` module loads this JSON file and provides the `REPOSITORIES
 The workflow `.github/workflows/measure-contributors.yml`:
 - Runs daily via cron (`0 0 * * *`) and on push to main
 - Uses a secret `ACCESS_TOKEN` for GitHub API access
-- Runs all eight scripts in sequence with `--use-cache` for incremental fetching
+- Runs the scripts in sequence, incrementally (`--use-cache`) by default
 - Uses `actions/cache` to persist cache directory between workflow runs
-- Copies results to `public/` and deploys to GitHub Pages
+- Runs `check_regression.py` before publishing, then copies results to `public/` and deploys to GitHub Pages
 - Archives raw cache and results as workflow artifacts
+
+### Full re-fetch mode (`clear_cache`)
+
+On Mondays (`date +%u` = 1) or when dispatched with `clear_cache: true`, the
+fetchers run **without** `--use-cache`, re-fetching every repository from
+scratch instead of resuming from cached cursors.
+
+**The cache is still restored in this mode, deliberately.** `fetch_with_cache`
+overwrites a repository's cache file only when its fetch *succeeds*, so keeping
+the old files means a repository whose upstream API is broken retains its last
+known-good data instead of silently vanishing from the output. Skipping the
+restore (the previous behavior) caused a real incident: 16 repositories and 843
+unique stars disappeared from the dashboard and could not be re-fetched.
+
+### Regression guard
+
+`check_regression.py` compares the freshly generated `results/` against the last
+published snapshot (`cache/last_published/`, persisted via `actions/cache`) and
+**fails the job before anything is published or cached** when a metric goes
+backwards. Series counts (e.g. number of `*_stars_history` keys) are compared
+with zero tolerance because a repository disappearing is always a bug;
+cumulative totals allow a small decrease (default 2%) because users do unstar
+repositories. Dispatch with `allow_regression: true` to override when a drop is
+genuinely expected.
 
 ## Important Implementation Details
 
@@ -205,8 +229,15 @@ The workflow `.github/workflows/measure-contributors.yml`:
 All fetcher scripts use `GitHubGraphQLClient` from `github_client.py` which implements rate limiting:
 - Check `X-RateLimit-Remaining` header before each request
 - Wait until rate limit reset if < 10 requests remaining
-- Exponential backoff on 403 errors (up to 5 retries)
+- Exponential backoff on 403 errors (up to `max_retries`, default 6)
 - 1 second delay between successful requests
+- **Transient GraphQL errors are retried** with capped exponential backoff plus
+  jitter. They are identified by signature (`_looks_transient`: "something went
+  wrong", timeouts, service unavailable, ...). Permanent errors (bad query,
+  `NOT_FOUND`) still fail fast so a genuinely missing repository is not retried
+  pointlessly.
+- On give-up the client **raises** (it never calls `sys.exit`), so a caller's
+  per-repository `try/except` can skip one repository instead of killing the run.
 
 ### Data Deduplication
 
@@ -230,6 +261,15 @@ When using `--use-cache`, fetcher scripts:
 
 ### Non-obvious Behaviors
 
+- **Some repos' `stargazers` connection is broken server-side**: for a subset of
+  repositories (`vision_pilot`, `agnocast`, `alpamayo-autoware`, `auto_e2e`,
+  `callback_isolated_executor`, and all `autoware_ai_*`), GitHub returns
+  `Something went wrong while executing your query` for *any* `stargazers(...)`
+  query — even `totalCount` alone — and REST `/repos/{o}/{r}/stargazers` returns
+  404. The scalar `stargazerCount` and REST `stargazers_count` still work. This
+  is deterministic and reproducible, **not** transient, so retrying cannot fix
+  it; these repos rely entirely on their cached stargazer data. This is why the
+  cache must never be discarded (see "Full re-fetch mode" above).
 - **Discussions are special-cased**: Only the `autoware` repo's discussions are fetched (hardcoded in `get_contributors.py`), not all repos.
 - **Comments/reviews capped at 100 per item**: GraphQL queries use `first:100` for comments and reviews — items with more will be truncated.
 - **`repositories.py` fails silently**: If `public/repositories.json` doesn't exist at import time, `REPOSITORIES` becomes an empty list with only a printed warning. Scripts will process zero repos.

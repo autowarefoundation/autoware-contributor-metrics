@@ -1,44 +1,10 @@
 import sys
 import argparse
-from typing import List, Dict, Optional
+from typing import List, Dict
 from repositories import REPOSITORIES
 from github_client import GitHubGraphQLClient, fetch_with_cache
 
 CACHE_DIR = "cache/raw_commit_data"
-
-
-def get_first_cursor(client: GitHubGraphQLClient, repository: str) -> Optional[str]:
-    """Get the first cursor for a repository's commit history"""
-    query = """
-    query($repository: String!) {
-        repository(owner:"autowarefoundation", name:$repository) {
-            defaultBranchRef {
-                target {
-                    ... on Commit {
-                        history(first:1) {
-                            edges {
-                                cursor
-                                node {
-                                    oid
-                                    committedDate
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    """
-
-    data = client.execute_query(query, {"repository": repository})
-    default_branch = data["data"]["repository"].get("defaultBranchRef")
-    if not default_branch:
-        return None
-    edges = default_branch["target"]["history"]["edges"]
-    if not edges:
-        return None
-    return edges[0]["cursor"]
 
 
 def get_commits(client: GitHubGraphQLClient, repository: str, start_cursor: str = None) -> List[Dict]:
@@ -54,20 +20,15 @@ def get_commits(client: GitHubGraphQLClient, repository: str, start_cursor: str 
     else:
         print(f"Retrieving commits for {repository}...")
 
-    # Use provided cursor or get the first one
-    if start_cursor:
-        cursor = start_cursor
-    else:
-        cursor = get_first_cursor(client, repository)
-        if cursor is None:
-            print(f"No commits found for {repository}")
-            return []
-
+    # `after: null` starts at the very first commit. Seeding this with the first
+    # commit's own cursor would silently skip that commit, because `after` is
+    # exclusive.
+    cursor = start_cursor
     all_edges = []
     page_count = 0
 
     query = """
-    query($cursor: String!, $repository: String!) {
+    query($cursor: String, $repository: String!) {
         repository(owner:"autowarefoundation", name:$repository) {
             defaultBranchRef {
                 target {
@@ -93,7 +54,7 @@ def get_commits(client: GitHubGraphQLClient, repository: str, start_cursor: str 
     }
     """
 
-    while cursor:
+    while True:
         print(f"Fetching page {page_count + 1} for {repository}...")
         data = client.execute_query(query, {"cursor": cursor, "repository": repository})
 
@@ -102,13 +63,11 @@ def get_commits(client: GitHubGraphQLClient, repository: str, start_cursor: str 
             break
 
         edges = default_branch["target"]["history"]["edges"]
+        if not edges:
+            break
         all_edges.extend(edges)
         page_count += 1
-
-        if len(edges) > 0:
-            cursor = edges[-1]["cursor"]
-        else:
-            cursor = None
+        cursor = edges[-1]["cursor"]
 
     print(f"Retrieved {len(all_edges)} commits for {repository}")
     return all_edges
