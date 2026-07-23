@@ -9,7 +9,12 @@ on:
   workflow_dispatch:
     inputs:
       clear_cache:
-        description: 'Skip restoring cache'
+        description: 'Re-fetch everything from scratch (existing cache is still kept as a fallback)'
+        required: false
+        type: boolean
+        default: false
+      allow_regression:
+        description: 'Publish even if metrics went backwards'
         required: false
         type: boolean
         default: false
@@ -35,18 +40,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Set clear_cache flags on Mondays or if requested
+      - name: Decide fetch mode (full re-fetch on Mondays or if requested)
         id: check_cache
         run: |
           if [ "$(date +%u)" = "1" ] || [ "${{ github.event.inputs.clear_cache }}" = "true" ]; then
             echo "clear_cache=true" >> $GITHUB_OUTPUT
+            echo "use_cache_flag=" >> $GITHUB_OUTPUT
           else
             echo "clear_cache=false" >> $GITHUB_OUTPUT
+            echo "use_cache_flag=--use-cache" >> $GITHUB_OUTPUT
           fi
 
+      # The cache is ALWAYS restored, even for a full re-fetch. A full re-fetch
+      # overwrites each repository's cache file only when its fetch succeeds, so
+      # keeping the old files means a repository whose upstream API is broken
+      # retains its last known-good data instead of vanishing from the output.
       - name: Restore cache
         uses: actions/cache/restore@v4
-        if: steps.check_cache.outputs.clear_cache != 'true'
         with:
           path: cache/
           key: contributor-data-cache-${{ github.run_number }}
@@ -54,20 +64,33 @@ jobs:
             contributor-data-cache-
 
       - name: Execute script
+        env:
+          USE_CACHE: ${{ steps.check_cache.outputs.use_cache_flag }}
         run: |
           python scripts/fetch_repositories.py --token ${{ secrets.ACCESS_TOKEN }}
-          python scripts/get_contributors.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
-          python scripts/get_stargazers.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
-          python scripts/get_commits.py --token ${{ secrets.ACCESS_TOKEN }} --use-cache
-          python scripts/get_apt_downloads.py --use-cache
-          python scripts/get_arxiv_mentions.py --use-cache
-          python scripts/get_arxiv_citations.py --use-cache
+          python scripts/get_contributors.py --token ${{ secrets.ACCESS_TOKEN }} $USE_CACHE
+          python scripts/get_stargazers.py --token ${{ secrets.ACCESS_TOKEN }} $USE_CACHE
+          python scripts/get_commits.py --token ${{ secrets.ACCESS_TOKEN }} $USE_CACHE
+          python scripts/get_apt_downloads.py $USE_CACHE
+          python scripts/get_arxiv_mentions.py $USE_CACHE
+          python scripts/get_arxiv_citations.py $USE_CACHE
           python scripts/get_google_trends.py
           python scripts/calculate_contributor_history.py
           python scripts/calculate_stargazers_history.py
           python scripts/calculate_commits_history.py
           python scripts/calculate_activity_history.py
           python scripts/calculate_rankings.py
+
+      # Fails the job before anything is published or cached when a metric went
+      # backwards, which is what a silently-dropped repository looks like.
+      - name: Guard against publishing a regression
+        run: |
+          python scripts/check_regression.py \
+            --results results --baseline cache/last_published \
+            ${{ github.event.inputs.allow_regression == 'true' && '--allow-regression' || '' }}
+
+      - name: Publish results
+        run: |
           cp results/contributors_history.json public/
           cp results/stars_history.json public/
           cp results/commits_history.json public/
@@ -77,6 +100,7 @@ jobs:
           cp results/arxiv_mentions_history.json public/
           cp results/arxiv_citations_history.json public/
           cp results/google_trends_history.json public/
+          python scripts/check_regression.py --results results --baseline cache/last_published --update
 
       - name: Save cache
         uses: actions/cache/save@v4
