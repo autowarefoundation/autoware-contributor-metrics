@@ -17,8 +17,6 @@ import shutil
 import time
 from pathlib import Path
 
-from pytrends.request import TrendReq
-
 from utils import write_json_output
 
 OUTPUT_FILE = "results/google_trends_history.json"
@@ -38,6 +36,10 @@ def fetch_trends(end_date: str) -> list[dict]:
 
     Returns a list of {month, interest, is_partial} dicts.
     """
+    # Imported lazily so the module stays importable (and unit-testable)
+    # without pytrends installed; only the actual fetch needs it.
+    from pytrends.request import TrendReq
+
     timeframe = f"{START_DATE} {end_date}"
     last_err: Exception | None = None
     for attempt in range(MAX_RETRIES):
@@ -74,6 +76,31 @@ def restore_from_cache(reason: str) -> bool:
     return True
 
 
+def write_placeholder(end_date: str, reason: str) -> None:
+    """Write an empty-but-valid output so the pipeline can finish.
+
+    Used only when the live fetch failed *and* there is no cached snapshot to
+    fall back on (e.g. a cleared-cache run while Google is rate-limiting). This
+    keeps the downstream ``cp`` + deploy alive instead of aborting the whole
+    job on one flaky external service. It is intentionally NOT written to
+    CACHE_FILE, so a later run can still fall back to a genuine snapshot.
+    """
+    output = {
+        "keyword": KEYWORD,
+        "geo": GEO or "worldwide",
+        "monthly": [],
+        "last_updated": end_date,
+        "note": (
+            "Google Trends data was unavailable at build time and no cached "
+            "snapshot existed to fall back on. This empty placeholder keeps the "
+            "pipeline running; it self-heals on the next successful fetch."
+        ),
+        "error": reason,
+    }
+    write_json_output(output, OUTPUT_FILE)
+    print(f"  Wrote empty Google Trends placeholder ({reason})")
+
+
 def main() -> None:
     today = datetime.date.today()
     end_date = today.strftime("%Y-%m-%d")
@@ -86,7 +113,8 @@ def main() -> None:
         print(f"Fetch failed: {e}")
         if restore_from_cache(reason=str(e)):
             return
-        raise
+        write_placeholder(end_date, reason=str(e))
+        return
 
     output = {
         "keyword": KEYWORD,
