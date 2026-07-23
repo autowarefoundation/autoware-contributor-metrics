@@ -1,38 +1,11 @@
 import sys
 import argparse
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Set
 from pathlib import Path
 from repositories import REPOSITORIES
 from github_client import GitHubGraphQLClient, fetch_with_cache
 
 CACHE_DIR = "cache/raw_stargazer_data"
-
-
-def get_first_cursor(client: GitHubGraphQLClient, repository: str) -> Optional[str]:
-    """Get the first cursor for a repository"""
-    query = """
-    query($repository: String!) {
-        repository(owner:"autowarefoundation", name:$repository) {
-            stargazers(first:1) {
-                totalCount
-                edges {
-                    cursor
-                    starredAt
-                    node {
-                        name
-                        login
-                    }
-                }
-            }
-        }
-    }
-    """
-
-    data = client.execute_query(query, {"repository": repository})
-    edges = data["data"]["repository"]["stargazers"]["edges"]
-    if not edges:
-        return None
-    return edges[0]["cursor"]
 
 
 def get_stargazers(client: GitHubGraphQLClient, repository: str, start_cursor: str = None) -> List[Dict]:
@@ -41,27 +14,23 @@ def get_stargazers(client: GitHubGraphQLClient, repository: str, start_cursor: s
     Args:
         client: GitHubGraphQLClient instance
         repository: Repository name
-        start_cursor: Optional cursor to start fetching from (for incremental updates)
+        start_cursor: Optional cursor to resume from (for incremental updates).
+                      None starts at the very first stargazer.
     """
     if start_cursor:
         print(f"Retrieving new stargazers for {repository} (incremental update)...")
     else:
         print(f"Retrieving stargazers for {repository}...")
 
-    # Use provided cursor or get the first one
-    if start_cursor:
-        cursor = start_cursor
-    else:
-        cursor = get_first_cursor(client, repository)
-        if cursor is None:
-            print(f"No stargazers found for {repository}")
-            return []
-
+    # `after: null` starts at the very first stargazer. Seeding this with the
+    # first stargazer's own cursor would silently skip that stargazer, because
+    # `after` is exclusive.
+    cursor = start_cursor
     all_edges = []
     page_count = 0
 
     query = """
-    query($cursor: String!, $repository: String!) {
+    query($cursor: String, $repository: String!) {
         repository(owner:"autowarefoundation", name:$repository) {
             stargazers(first:100, after: $cursor) {
                 totalCount
@@ -78,18 +47,16 @@ def get_stargazers(client: GitHubGraphQLClient, repository: str, start_cursor: s
     }
     """
 
-    while cursor:
+    while True:
         print(f"Fetching page {page_count + 1} for {repository}...")
         data = client.execute_query(query, {"cursor": cursor, "repository": repository})
 
         edges = data["data"]["repository"]["stargazers"]["edges"]
+        if not edges:
+            break
         all_edges.extend(edges)
         page_count += 1
-
-        if len(edges) > 0:
-            cursor = edges[-1]["cursor"]
-        else:
-            cursor = None
+        cursor = edges[-1]["cursor"]
 
     print(f"Retrieved {len(all_edges)} stargazers for {repository}")
     return all_edges
