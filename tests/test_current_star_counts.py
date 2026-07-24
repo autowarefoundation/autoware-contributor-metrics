@@ -6,47 +6,11 @@ accurate current number for those repositories even though their per-date
 history cannot be rebuilt.
 """
 import check_regression as cr
-import get_stargazers
 
+# Reading the scalar count is covered by tests/test_stargazer_access.py, which
+# owns the restricted-listing behaviour it is paired with.
 
-class CountClient:
-    """Answers stargazerCount queries; optionally fails for some repositories."""
-
-    def __init__(self, counts, broken=()):
-        self.counts = counts
-        self.broken = set(broken)
-        self.queried = []
-
-    def execute_query(self, query, variables):
-        repo = variables["repository"]
-        self.queried.append(repo)
-        if repo in self.broken:
-            raise Exception("GraphQL errors: ['Something went wrong ...']")
-        return {"data": {"repository": {"stargazerCount": self.counts[repo]}}}
-
-
-def test_reads_the_scalar_count():
-    client = CountClient({"vision_pilot": 710})
-
-    assert get_stargazers.get_stargazer_count(client, "vision_pilot") == 710
-
-
-def test_count_query_does_not_use_the_stargazers_connection():
-    """The whole point: avoid the connection that is broken for these repos."""
-    captured = {}
-
-    class Recorder:
-        def execute_query(self, query, variables):
-            captured["query"] = query
-            return {"data": {"repository": {"stargazerCount": 1}}}
-
-    get_stargazers.get_stargazer_count(Recorder(), "repo")
-
-    assert "stargazerCount" in captured["query"]
-    assert "stargazers(" not in captured["query"]
-
-
-# --- regression guard coverage of the new metrics ---------------------------
+# --- regression guard coverage of the current-count metrics -----------------
 
 def _stars(counts_map, total):
     return {

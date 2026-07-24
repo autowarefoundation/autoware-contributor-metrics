@@ -261,23 +261,30 @@ When using `--use-cache`, fetcher scripts:
 
 ### Non-obvious Behaviors
 
-- **Some repos' `stargazers` connection is broken server-side**: for a subset of
-  repositories (`vision_pilot`, `agnocast`, `alpamayo-autoware`, `auto_e2e`,
-  `callback_isolated_executor`, and all `autoware_ai_*`), GitHub returns
-  `Something went wrong while executing your query` for *any* `stargazers(...)`
-  query — even `totalCount` alone — and REST `/repos/{o}/{r}/stargazers` returns
-  404. The scalar `stargazerCount` and REST `stargazers_count` still work. This
-  is deterministic and reproducible, **not** transient, so retrying cannot fix
-  it; these repos rely entirely on their cached stargazer data. This is why the
-  cache must never be discarded (see "Full re-fetch mode" above).
-  As a partial mitigation `get_stargazers.py` records the scalar
-  `stargazerCount` for every repository into
-  `cache/raw_stargazer_data/current_counts.json`, which
-  `calculate_stargazers_history.py` exposes as `current_star_counts` /
-  `total_current_stars`. That keeps an accurate *current* number for these
-  repos, but their per-date history cannot be rebuilt. These counts are
-  deliberately **not** added to `total_stars_history`: that series counts
-  unique *people*, and a bare count carries no identities to deduplicate by.
+- **Listing stargazers requires collaborator access**: GitHub
+  [restricted stargazer listing to admins and collaborators](https://github.blog/changelog/2026-06-30-upcoming-access-restrictions-to-public-api-endpoints-and-ui-views/).
+  Measured across all 37 tracked repositories with **zero exceptions**: a token
+  with `push` (WRITE/MAINTAIN/ADMIN) can list stargazers; READ/NONE cannot.
+  Unauthenticated requests get `401`, non-collaborators get REST `404` and a
+  GraphQL `Something went wrong while executing your query` — with HTTP 200 and
+  **no error type**, so it is indistinguishable from a genuine transient error
+  after the fact. `viewerPermission` is therefore the only reliable signal and
+  must be checked **before** attempting the listing; `get_stargazers.py` does
+  this via `can_list_stargazers()` and skips restricted repositories outright,
+  which also avoids burning a full retry/backoff cycle per repository.
+  The scalar `stargazerCount` is unaffected, so `get_stargazers.py` records it
+  for every repository into `cache/raw_stargazer_data/current_counts.json`
+  (exposed as `current_star_counts` / `total_current_stars`), plus per-repo
+  permission in `access_status.json` (exposed as `stargazer_access`, which the
+  dashboard uses to explain the gap). Those counts are deliberately **not**
+  added to `total_stars_history`: that series counts unique *people*, and a
+  bare count carries no identities to deduplicate by.
+  Consequences: affected repositories keep an accurate current count but their
+  per-date history **cannot be rebuilt**, and whatever history is already
+  cached is irreplaceable — which is why the cache must never be discarded (see
+  "Full re-fetch mode" above). Granting the CI token's identity write access to
+  a repository restores full history for it; changing the token's *scopes* does
+  nothing, since this is about the identity's permission on each repository.
 - **Discussions are special-cased**: Only the `autoware` repo's discussions are fetched (hardcoded in `get_contributors.py`), not all repos.
 - **Comments/reviews capped at 100 per item**: GraphQL queries use `first:100` for comments and reviews — items with more will be truncated.
 - **`repositories.py` fails silently**: If `public/repositories.json` doesn't exist at import time, `REPOSITORIES` becomes an empty list with only a printed warning. Scripts will process zero repos.

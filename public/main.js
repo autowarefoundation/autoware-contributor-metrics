@@ -346,20 +346,60 @@ function renderStarsYearlyChart(json) {
   new ApexCharts(chartEl, options).render();
 }
 
+function renderStarsAccessNote(json) {
+  const el = document.querySelector('#stars-note');
+  if (!el) return;
+
+  // Driven entirely by what the last run could actually read, so the note
+  // disappears on its own if access is restored.
+  const access = json.stargazer_access;
+  const restricted = access?.restricted_repos || [];
+  if (!restricted.length) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const names = restricted
+    .map(repo => `<a href="https://github.com/autowarefoundation/${repo}" target="_blank" rel="noopener noreferrer">${repo}</a>`)
+    .join(', ');
+
+  el.innerHTML = `
+    <div class="section-note">
+      <strong>Star history is unavailable for ${restricted.length} of
+      ${access.tracked_repo_count} repositories.</strong>
+      GitHub now
+      <a href="${access.reference}" target="_blank" rel="noopener noreferrer">restricts
+      listing a repository's stargazers</a> to its collaborators, so the dates
+      behind those stars can no longer be read. Their current totals are still
+      counted in <em>Total Stars</em> and in the ranking below, but they have no
+      line on the chart and are not part of <em>Total Unique Stars</em>.
+      <div class="section-note-repos">${names}</div>
+    </div>
+  `;
+}
+
 function renderStarsStats(json) {
   const latestEntry = getLastEntry(json.total_stars_history);
   const date = latestEntry ? formatDate(latestEntry.date) : 'N/A';
 
   const cards = [];
 
-  cards.push(createMetricCard('Total Unique Stars', latestEntry?.star_count || 0, 'cyan', `Unique people, updated ${date}`));
+  // The two totals cover different repository sets, so each says which.
+  const access = json.stargazer_access;
+  const uniqueScope = access
+    ? `Unique people across ${access.history_repo_count} repositories`
+    : 'Unique people';
+  cards.push(createMetricCard('Total Unique Stars', latestEntry?.star_count || 0, 'cyan',
+    `${uniqueScope}, updated ${date}`));
 
   // Sum of per-repository counts. Higher than the unique figure because one
   // person starring several repositories is counted once per repository, and
   // it also includes repositories whose stargazer list cannot be enumerated.
   if (Number.isFinite(json.total_current_stars)) {
-    cards.push(createMetricCard('Total Stars', json.total_current_stars, 'gold',
-      'Sum across repositories'));
+    const totalScope = access
+      ? `Sum across all ${access.tracked_repo_count} repositories`
+      : 'Sum across repositories';
+    cards.push(createMetricCard('Total Stars', json.total_current_stars, 'gold', totalScope));
   }
 
   // Top repos card
@@ -1149,6 +1189,7 @@ if (starsResult.status === 'fulfilled') {
     renderStarsChart(starsResult.value);
     renderStarsYearlyChart(starsResult.value);
     renderStarsStats(starsResult.value);
+    renderStarsAccessNote(starsResult.value);
   });
 } else {
   showError('#stars-chart', 'Stars history data not available');
