@@ -6,6 +6,36 @@ from repositories import REPOSITORIES
 from utils import parse_github_datetime, load_json_file, generate_cumulative_history, write_json_output
 
 
+ACCESS_STATUS_FILE = "cache/raw_stargazer_data/access_status.json"
+ACCESS_RESTRICTION_URL = (
+    "https://github.blog/changelog/2026-06-30-upcoming-access-restrictions-"
+    "to-public-api-endpoints-and-ui-views/"
+)
+
+
+def build_access_metadata(access_status: Dict, history_repos: set) -> Dict:
+    """Summarise which repositories GitHub let us list stargazers for.
+
+    Returned verbatim to the dashboard so the page can explain, from the data
+    itself, why some repositories have a current star count but no history.
+    Returns None when nothing is known, so an older cache simply shows no note.
+    """
+    if not access_status:
+        return None
+
+    restricted = sorted(
+        repo for repo, s in access_status.items()
+        if not s.get("can_list_stargazers", True)
+    )
+    return {
+        "restricted_repos": restricted,
+        "restricted_repo_count": len(restricted),
+        "history_repo_count": len(history_repos),
+        "tracked_repo_count": len(access_status),
+        "reference": ACCESS_RESTRICTION_URL,
+    }
+
+
 class StarsHistoryAnalyzer:
     """Class to analyze and generate star history from stargazer data"""
 
@@ -68,6 +98,8 @@ def main():
     all_stargazers_info = []  # Raw stargazer data for unique counting
     output_data = {}
 
+    history_repos = set()
+
     for repository in repositories:
         file_path = Path("cache/raw_stargazer_data") / f"{repository}_stargazers.json"
 
@@ -76,6 +108,7 @@ def main():
 
         if not stargazers_data:
             continue
+        history_repos.add(repository)
 
         # Extract raw stargazer info (username, date)
         stargazers_info = analyzer.extract_stargazers_info(stargazers_data)
@@ -103,6 +136,16 @@ def main():
         output_data["total_current_stars"] = sum(counts.values())
         print(f"Current star counts: {len(counts)} repositories, "
               f"{sum(counts.values())} stars total (sum, not unique)")
+
+    # Why some repositories have a count but no history, carried with the data
+    # so the dashboard can say so without hardcoding today's repository list.
+    access_meta = build_access_metadata(load_json_file(ACCESS_STATUS_FILE), history_repos)
+    if access_meta:
+        output_data["stargazer_access"] = access_meta
+        if access_meta["restricted_repos"]:
+            print(f"Stargazer listing restricted for "
+                  f"{access_meta['restricted_repo_count']} repositories: "
+                  f"{', '.join(access_meta['restricted_repos'])}")
 
     # Calculate unique stargazer count
     unique_count = len(set(

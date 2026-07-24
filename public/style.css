@@ -424,6 +424,41 @@ a:hover {
   transition: background-color 0.3s, border-color 0.3s;
 }
 
+/* Explains a caveat about the data above it. Colours come from the theme
+   variables, so it follows light/dark without a separate dark rule. */
+.section-note {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent-gold);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.section-note strong {
+  color: var(--text-primary);
+}
+
+.section-note a {
+  color: var(--accent-cyan);
+  text-decoration: none;
+}
+
+.section-note a:hover {
+  text-decoration: underline;
+}
+
+.section-note-repos {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
 /* =============================================================================
    Loading Skeleton
    ============================================================================= */
