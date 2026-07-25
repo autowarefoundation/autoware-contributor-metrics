@@ -2,7 +2,7 @@ import datetime
 from typing import Dict, List, Tuple
 from collections import defaultdict
 from pathlib import Path
-from repositories import REPOSITORIES
+from repositories import REPOSITORIES, load_org_metadata
 from utils import parse_github_datetime, load_json_file, generate_cumulative_history, write_json_output
 
 
@@ -136,6 +136,18 @@ def main():
         output_data["total_current_stars"] = sum(counts.values())
         print(f"Current star counts: {len(counts)} repositories, "
               f"{sum(counts.values())} stars total (sum, not unique)")
+
+    # Organization-wide star total, computed by fetch_repositories.py from the
+    # full repository listing. Carried through here so the dashboard reads every
+    # star figure from one file. It is a strictly larger set than the tracked
+    # repositories above, hence a separate key: `total_current_stars` must keep
+    # equalling the sum of `current_star_counts`.
+    org_meta = load_org_metadata()
+    if isinstance(org_meta.get("org_star_total"), int):
+        output_data["org_star_total"] = org_meta["org_star_total"]
+        output_data["org_repo_count"] = org_meta.get("org_repo_count")
+        print(f"Organization-wide stars: {org_meta['org_star_total']} across "
+              f"{org_meta.get('org_repo_count')} public repositories")
 
     # Why some repositories have a count but no history, carried with the data
     # so the dashboard can say so without hardcoding today's repository list.

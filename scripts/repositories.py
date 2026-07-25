@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 
 
-def load_repositories() -> list:
-    """Load repository list from JSON file"""
+def load_repositories_data() -> dict:
+    """Load the whole repositories.json payload"""
     # Try multiple paths to find the JSON file
     possible_paths = [
         Path(__file__).parent.parent / "public" / "repositories.json",
@@ -18,12 +18,28 @@ def load_repositories() -> list:
     for path in possible_paths:
         if path.exists():
             with open(path, 'r') as f:
-                data = json.load(f)
-            return data.get("repositories", [])
+                return json.load(f)
 
     raise FileNotFoundError(
         "repositories.json not found. Run 'python scripts/fetch_repositories.py' first."
     )
+
+
+def load_repositories() -> list:
+    """Load repository list from JSON file"""
+    return load_repositories_data().get("repositories", [])
+
+
+def load_org_metadata() -> dict:
+    """Organization-wide figures recorded by fetch_repositories.py.
+
+    Returns an empty dict when the file is missing or predates these fields, so
+    a caller can fall back rather than fail.
+    """
+    try:
+        return load_repositories_data().get("metadata", {})
+    except FileNotFoundError:
+        return {}
 
 
 # For backward compatibility - load repositories on import

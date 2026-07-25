@@ -392,10 +392,17 @@ function renderStarsStats(json) {
   cards.push(createMetricCard('Total Unique Stars', latestEntry?.star_count || 0, 'cyan',
     `${uniqueScope}, updated ${date}`));
 
-  // Sum of per-repository counts. Higher than the unique figure because one
-  // person starring several repositories is counted once per repository, and
-  // it also includes repositories whose stargazer list cannot be enumerated.
-  if (Number.isFinite(json.total_current_stars)) {
+  // Sum of per-repository counts across every public repository in the
+  // organization, not just the charted subset. Higher than the unique figure
+  // because one person starring several repositories is counted once per
+  // repository, and it also includes repositories whose stargazer list cannot
+  // be enumerated. Falls back to the tracked-only sum for older data files.
+  if (Number.isFinite(json.org_star_total)) {
+    const orgScope = Number.isFinite(json.org_repo_count)
+      ? `Sum across all ${json.org_repo_count} public autowarefoundation repositories`
+      : 'Sum across all public autowarefoundation repositories';
+    cards.push(createMetricCard('Total Stars', json.org_star_total, 'gold', orgScope));
+  } else if (Number.isFinite(json.total_current_stars)) {
     const totalScope = access
       ? `Sum across all ${access.tracked_repo_count} repositories`
       : 'Sum across repositories';
