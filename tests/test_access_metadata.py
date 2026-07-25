@@ -47,6 +47,20 @@ def test_a_permitted_repo_that_failed_is_not_called_restricted():
     assert meta["restricted_repos"] == []
 
 
+def test_without_an_archive_every_restricted_repo_has_no_history():
+    """The default caller passes no frozen set; nothing may be claimed frozen."""
+    access = {
+        "autoware": status("MAINTAIN", True),
+        "vision_pilot": status("READ", False, stars=714),
+    }
+
+    meta = calc.build_access_metadata(access, history_repos={"autoware"})
+
+    assert meta["frozen_history_repos"] == []
+    assert meta["no_history_repos"] == ["vision_pilot"]
+    assert "frozen_captured_at" not in meta
+
+
 def test_missing_access_status_yields_no_metadata():
     """Older caches have no access file; the page must simply show no notice."""
     assert calc.build_access_metadata({}, history_repos={"autoware"}) is None
