@@ -38,6 +38,7 @@ def fetch_all_repositories(client: GitHubGraphQLClient) -> List[Dict]:
                 nodes {
                     name
                     isArchived
+                    isPrivate
                     stargazerCount
                     forkCount
                     pushedAt
@@ -64,6 +65,26 @@ def fetch_all_repositories(client: GitHubGraphQLClient) -> List[Dict]:
 
     print(f"Fetched {len(all_repos)} repositories total")
     return all_repos
+
+
+def summarize_org_stars(repos: List[Dict]) -> Dict:
+    """Star total across every public repository in the organization.
+
+    This is what the dashboard shows as *Total Stars*, so the figure answers
+    "how many stars does Autoware Foundation have" rather than "how many do the
+    repositories we chart have". It is computed here because this is the only
+    script that already pages the whole organization; deriving it costs no
+    extra API calls.
+
+    Private repositories are excluded so the number stays reproducible: a token
+    with broader access would otherwise report a total the public site cannot
+    account for.
+    """
+    public = [r for r in repos if not r.get("isPrivate")]
+    return {
+        "org_star_total": sum(r["stargazerCount"] for r in public),
+        "org_repo_count": len(public),
+    }
 
 
 def filter_and_rank_repositories(repos: List[Dict], cutoff_years: int = 2) -> Dict:
@@ -138,6 +159,7 @@ def filter_and_rank_repositories(repos: List[Dict], cutoff_years: int = 2) -> Di
             "total_fetched": len(repos),
             "active_count": len(top_active),
             "legacy_count": len(legacy_repos),
+            **summarize_org_stars(repos),
         }
     }
 
@@ -189,6 +211,8 @@ def main():
 
     print(f"\nLegacy repositories: {len(result['legacy'])}")
     print(f"Total repositories in list: {len(result['repositories'])}")
+    print(f"Organization-wide stars: {result['metadata']['org_star_total']} "
+          f"across {result['metadata']['org_repo_count']} public repositories")
 
 
 if __name__ == "__main__":

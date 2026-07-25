@@ -77,6 +77,11 @@ def metrics_for(filename: str, data: Any) -> Dict[str, float]:
         if isinstance(data.get("current_star_counts"), dict):
             metrics["current_count_repos"] = len(data["current_star_counts"])
             metrics["total_current_stars"] = data.get("total_current_stars", 0)
+        # Guarded as a cumulative total, not a count: a partial organization
+        # listing shows up as a large star drop, while a repository genuinely
+        # being deleted or made private is a legitimate small one.
+        if isinstance(data.get("org_star_total"), int):
+            metrics["org_star_total"] = data["org_star_total"]
         return metrics
     if filename == "commits_history.json":
         return {"repo_series": sum(1 for k in data if k.endswith("_commits_history"))}
