@@ -217,7 +217,7 @@ function createYearlyComboOptions({ yearly, title, barName, lineName, color }) {
 // Chart Configuration
 // =============================================================================
 
-function createChartOptions({ series, title, yAxisTitle, colors, showLegend = false, height = 400 }) {
+function createChartOptions({ series, title, yAxisTitle, colors, showLegend = false, height = 400, strokeDashArray }) {
   return {
     series,
     chart: {
@@ -253,6 +253,8 @@ function createChartOptions({ series, title, yAxisTitle, colors, showLegend = fa
     stroke: {
       width: 2,
       curve: 'smooth',
+      // Per-series when given, so a chart can mark some lines as not current.
+      ...(strokeDashArray && { dashArray: strokeDashArray }),
     },
     colors,
     ...(showLegend && {
@@ -299,24 +301,34 @@ function renderStarsChart(json) {
   const chartEl = document.querySelector('#stars-chart');
   chartEl.innerHTML = '';
 
+  // Repositories served from the committed archive rather than a live fetch:
+  // GitHub stopped letting us list their stargazers, so their line stops at the
+  // capture date. Drawn dashed so a flat tail is not read as a repository that
+  // simply stopped attracting stars.
+  const frozen = json.star_history_sources || {};
+
   const series = [
     {
       name: 'Total Unique Stars',
       data: mapToChartData(json.total_stars_history, 'star_count'),
     },
   ];
+  const strokeDashArray = [0];
 
   getRepoStarsSorted(json)
     // Only repositories with an actual history series can be plotted. Some are
     // known only by their current count, because GitHub cannot enumerate their
-    // stargazers (see CLAUDE.md). Those still appear in the Top Repositories
-    // ranking, but there is no series to draw for them here.
+    // stargazers and no archived records survive either (see CLAUDE.md). Those
+    // still appear in the Top Repositories ranking, but there is no series to
+    // draw for them here.
     .filter(({ repo }) => Array.isArray(json[`${repo}_stars_history`]))
     .forEach(({ repo }, index) => {
+      const isFrozen = Boolean(frozen[repo]);
       series.push({
-        name: `${rankPrefix(index + 1)} ${repo}`,
+        name: `${rankPrefix(index + 1)} ${repo}${isFrozen ? ' (frozen)' : ''}`,
         data: mapToChartData(json[`${repo}_stars_history`], 'star_count'),
       });
+      strokeDashArray.push(isFrozen ? 5 : 0);
     });
 
   const options = createChartOptions({
@@ -326,6 +338,7 @@ function renderStarsChart(json) {
     colors: COLORS.stars,
     showLegend: true,
     height: 400,
+    strokeDashArray,
   });
 
   new ApexCharts(chartEl, options).render();
@@ -359,21 +372,40 @@ function renderStarsAccessNote(json) {
     return;
   }
 
-  const names = restricted
+  // Restricted repositories split two ways, and the split has to be described
+  // differently: some have archived records and a line that stops, the rest
+  // have nothing at all. A payload predating the archive describes neither, and
+  // for those every restricted repository genuinely has no history.
+  const frozen = access.frozen_history_repos || [];
+  const noHistory = access.no_history_repos || restricted;
+  const capturedAt = access.frozen_captured_at;
+
+  const linkList = repos => repos
     .map(repo => `<a href="https://github.com/autowarefoundation/${repo}" target="_blank" rel="noopener noreferrer">${repo}</a>`)
     .join(', ');
 
+  const frozenSentence = frozen.length
+    ? `For ${frozen.length} of them we still have records${capturedAt ? ` captured on ${capturedAt}` : ''}:
+       their lines are dashed, stop there, and gain no new stars.`
+    : '';
+  const noHistorySentence = noHistory.length
+    ? `${frozen.length ? 'The remaining' : 'All'} ${noHistory.length} have no history at all &mdash;
+       no line on the chart, and not part of <em>Total Unique Stars</em>.`
+    : '';
+
   el.innerHTML = `
     <div class="section-note">
-      <strong>Star history is unavailable for ${restricted.length} of
-      ${access.tracked_repo_count} repositories.</strong>
-      GitHub now
+      <strong>GitHub
       <a href="${access.reference}" target="_blank" rel="noopener noreferrer">restricts
-      listing a repository's stargazers</a> to its collaborators, so the dates
-      behind those stars can no longer be read. Their current totals are still
-      counted in <em>Total Stars</em> and in the ranking below, but they have no
-      line on the chart and are not part of <em>Total Unique Stars</em>.
-      <div class="section-note-repos">${names}</div>
+      listing a repository's stargazers</a> to its collaborators</strong>, so for
+      ${restricted.length} of ${access.tracked_repo_count} repositories we can no
+      longer read who starred them or when.
+      ${frozenSentence}
+      ${noHistorySentence}
+      All ${restricted.length} keep their current totals in <em>Total Stars</em>
+      and in the ranking below.
+      ${frozen.length ? `<div class="section-note-repos"><strong>Frozen history:</strong> ${linkList(frozen)}</div>` : ''}
+      ${noHistory.length ? `<div class="section-note-repos"><strong>No history:</strong> ${linkList(noHistory)}</div>` : ''}
     </div>
   `;
 }

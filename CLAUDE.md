@@ -106,6 +106,7 @@ GitHub GraphQL API
     ↓
 4. calculate_contributor_history.py → results/contributors_history.json
 5. calculate_stargazers_history.py → results/stars_history.json
+     ↑ also reads data/frozen_star_history.json (committed, irreplaceable)
 6. calculate_commits_history.py → results/commits_history.json
 7. calculate_activity_history.py → results/activity_history.json
 8. calculate_rankings.py → results/rankings.json
@@ -287,6 +288,34 @@ When using `--use-cache`, fetcher scripts:
   "Full re-fetch mode" above). Granting the CI token's identity write access to
   a repository restores full history for it; changing the token's *scopes* does
   nothing, since this is about the identity's permission on each repository.
+- **`actions/cache` is not a durable store, and this already cost real data**:
+  GitHub evicts cache entries after 7 days without a hit and under the
+  repository's 10 GB budget. CLAUDE.md's instruction never to discard the cache
+  does not bind GitHub. In 2026 the stargazer cache was evicted; the 21
+  repositories that were still listable were re-fetched, and the 16 restricted
+  ones simply vanished — *Total Unique Stars* fell from 13,760 to 13,321, a
+  cumulative count of distinct people moving backwards. Note that
+  `get_stargazers.py` skipping a restricted repository does **not** delete its
+  cache file, so a surviving cache would have kept those lines.
+- **`data/frozen_star_history.json` is committed, irreplaceable, and read as a
+  fallback**: eleven of those sixteen repositories were recoverable from an old
+  local cache copy and are now committed to git — the only store here that
+  nothing evicts. `calculate_stargazers_history.py` uses a repository's live
+  cache when one exists and the archive only when none does; **live wins
+  outright and the two are never merged**, because `fetch_with_cache` always
+  produces a complete listing and merging a stale archive could only resurrect
+  people who have since unstarred. Archived records feed `total_stars_history`
+  as well as their own series — they are real people with real dates. The
+  repositories served from the archive are named in `star_history_sources`
+  (absence means live) and split out in `stargazer_access` as
+  `frozen_history_repos` vs `no_history_repos`, which is what lets the
+  dashboard describe a stopped line differently from a missing one.
+  `scripts/frozen_star_history.py` **raises** on a missing or malformed archive
+  instead of degrading to "no frozen history" — the opposite of the
+  `repositories.py` behavior below, and deliberately so: silent degradation is
+  how this data was lost the first time. `autoware_ai_utilities` is archived
+  but still listable, so it exercises the live-wins path in production. See
+  `data/README.md` before touching that file; it must never be regenerated.
 - **Two different star totals, three different repository sets**: the dashboard's
   *Total Stars* is `org_star_total` — the sum of `stargazerCount` over **every
   public repository in the organization** (142), not just the 37 tracked ones.
@@ -300,12 +329,16 @@ When using `--use-cache`, fetcher scripts:
   `total_current_stars` must keep equalling `sum(current_star_counts.values())`
   over the tracked set, which is what the Top Repositories ranking is built
   from. And both differ again from `total_stars_history`, which counts unique
-  *people* across only the repositories whose stargazers can be listed. Three
-  numbers, three sets — each metric card names its own scope for this reason.
+  *people* across only the repositories whose stargazers can be listed or whose
+  records survive in `data/frozen_star_history.json`. Three numbers, three sets
+  — each metric card names its own scope for this reason.
   `main.js` falls back to `total_current_stars` when `org_star_total` is absent,
   so a stale cached payload still renders.
 - **Discussions are special-cased**: Only the `autoware` repo's discussions are fetched (hardcoded in `get_contributors.py`), not all repos.
 - **Comments/reviews capped at 100 per item**: GraphQL queries use `first:100` for comments and reviews — items with more will be truncated.
 - **`repositories.py` fails silently**: If `public/repositories.json` doesn't exist at import time, `REPOSITORIES` becomes an empty list with only a printed warning. Scripts will process zero repos.
 - **PR reviews not used in contributor history**: `calculate_contributor_history.py` ignores review data in the cache; reviews only flow into `calculate_rankings.py`.
-- **No test or lint infrastructure**: There are no tests, linters, or pre-commit hooks in this project.
+- **Tests but no lint infrastructure**: `pytest` suites live in `tests/` (run
+  `python -m pytest tests/`); `conftest.py` puts `scripts/` on the path so test
+  modules import them by bare name. There are no linters or pre-commit hooks,
+  and the tests are not wired into CI — run them yourself before opening a PR.
