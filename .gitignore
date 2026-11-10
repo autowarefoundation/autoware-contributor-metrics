@@ -6,6 +6,7 @@ cache
 public/*.json
 results
 .tokensave
+/.idea/
 
 # Local cache/results snapshots used to recover data/frozen_star_history.json.
 # The recovered records are committed; the archives they came from are not.
