@@ -211,6 +211,11 @@ The `repositories.py` module loads this JSON file and provides the `REPOSITORIES
 
 The workflow `.github/workflows/measure-contributors.yml`:
 - Runs daily via cron (`0 0 * * *`) and on push to main
+- Runs one at a time (`concurrency`). A second run waits until the first
+  run ends. Without this, two pushes close together deploy Pages in parallel,
+  and the second deploy fails. Do not re-run a run that failed at `Publish`.
+  The re-run uploads a second `github-pages` artifact, and `deploy-pages`
+  then fails. Start a new run with `gh workflow run` instead.
 - Uses a secret `ACCESS_TOKEN` for GitHub API access
 - Runs the scripts in sequence, incrementally (`--use-cache`) by default
 - Uses `actions/cache` to persist cache directory between workflow runs
