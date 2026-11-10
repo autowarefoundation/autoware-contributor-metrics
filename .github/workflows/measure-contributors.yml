@@ -19,6 +19,14 @@ on:
         type: boolean
         default: false
 
+# Run one workflow at a time. Two pushes close together otherwise run in
+# parallel, and the second Pages deploy fails because the first one is still
+# in progress. The runs also save to the same actions/cache entry.
+# Do not cancel a run in progress: a cancelled run publishes nothing.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   measure-contributors:
     runs-on: ubuntu-24.04
