@@ -162,6 +162,13 @@ calculate step):
 **Rankings Calculator** (`scripts/calculate_rankings.py`):
 - Generates monthly and yearly contributor rankings
 - Four ranking categories: MVP, Best Committer (merged PRs), Best Evangelist (issues/discussions), Best Reviewer (PR reviews)
+- Best Committer counts a merged PR only when a person other than the author,
+  and not a bot, reviewed it (`_has_peer_review`). This follows the
+  maintainers' position in
+  https://github.com/autowarefoundation/autoware-contributor-metrics/issues/7#issuecomment-4033621189.
+  Without it, self-merged PRs count too: `autoware_carla_scenario` alone has
+  about 1,000 of them from one account. Any review state counts, because
+  the fetch query does not request the state. PR comments do not count.
 - MVP requires appearing in all three categories; ranked by sum of ranks
 - Excludes bot accounts (dependabot, github-actions, etc.)
 
