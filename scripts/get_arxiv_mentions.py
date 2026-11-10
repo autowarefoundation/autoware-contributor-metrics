@@ -113,14 +113,15 @@ def parse_entries(xml_text: str) -> list[dict]:
     return entries
 
 
-def fetch_all(session: requests.Session, known_ids: set[str]) -> list[dict]:
-    """Fetch all matching entries, skipping those already in known_ids when possible.
+def fetch_all(session: requests.Session, known_ids: set[str]) -> tuple[list[dict], bool]:
+    """Fetch all matching entries. Returns (entries, complete).
 
     On a persistent fetch failure (e.g. arXiv 429 rate-limiting) this returns the
-    entries collected so far instead of raising, so the caller can fall back to the
-    existing cache and keep the pipeline running.
+    entries collected so far with complete=False instead of raising, so the caller
+    can fall back to the existing cache and keep the pipeline running.
     """
     all_entries: list[dict] = []
+    complete = True
     start = 0
     while True:
         print(f"Fetching arXiv start={start}...")
@@ -129,6 +130,7 @@ def fetch_all(session: requests.Session, known_ids: set[str]) -> list[dict]:
         except RuntimeError as e:
             print(f"  {e}")
             print("  arXiv unavailable; continuing with data collected so far.")
+            complete = False
             break
         entries = parse_entries(xml_text)
         if not entries:
@@ -141,7 +143,24 @@ def fetch_all(session: requests.Session, known_ids: set[str]) -> list[dict]:
             break
         start += PAGE_SIZE
         time.sleep(REQUEST_DELAY_SEC)
-    return all_entries
+    return all_entries, complete
+
+
+def merge_papers(cached: list[dict], fetched: list[dict], complete: bool, use_cache: bool) -> list[dict]:
+    """Combine the cached papers with the fetched ones, sorted by published date.
+
+    A full re-fetch (use_cache=False) that completed replaces the cache, so a
+    paper that left the search results drops out. In every other case the
+    fetched papers are merged onto the cache. This includes a full re-fetch
+    that failed part way. Before this rule, a failed full re-fetch on Mondays
+    (arXiv answers 429) produced no output file, the publish step failed, and
+    the run did not save the fresh GitHub data in its cache.
+    """
+    base = [] if (complete and not use_cache) else cached
+    by_id: dict[str, dict] = {p["arxiv_id"]: p for p in base if isinstance(p, dict) and p.get("arxiv_id")}
+    for e in fetched:
+        by_id[e["arxiv_id"]] = e
+    return sorted(by_id.values(), key=lambda x: x.get("published", ""))
 
 
 def aggregate_yearly(papers: list[dict]) -> dict[int, int]:
@@ -187,17 +206,16 @@ def main() -> None:
 
     Path(CACHE_FILE).parent.mkdir(parents=True, exist_ok=True)
 
-    cached = load_json_file(CACHE_FILE) if args.use_cache else []
-    cached_by_id: dict[str, dict] = {p["arxiv_id"]: p for p in cached if isinstance(p, dict)}
-    known_ids = set(cached_by_id.keys())
+    # Load the cache in both modes. A full re-fetch uses it only as a fallback.
+    cached = load_json_file(CACHE_FILE) or []
+    known_ids = {p["arxiv_id"] for p in cached if isinstance(p, dict) and p.get("arxiv_id")}
     print(f"Loaded {len(known_ids)} cached papers")
 
     session = build_session()
-    fetched = fetch_all(session, known_ids)
-    for e in fetched:
-        cached_by_id[e["arxiv_id"]] = e
-
-    papers = sorted(cached_by_id.values(), key=lambda x: x.get("published", ""))
+    fetched, complete = fetch_all(session, known_ids)
+    if not complete and not args.use_cache:
+        print("Full re-fetch did not complete; merging onto the cached papers.")
+    papers = merge_papers(cached, fetched, complete, args.use_cache)
     if not papers:
         # Nothing cached and the fetch failed: don't clobber an existing output
         # with an empty one — leave the previous snapshot in place.

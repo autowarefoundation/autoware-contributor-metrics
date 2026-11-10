@@ -2,7 +2,7 @@ import sys
 import argparse
 from typing import List, Dict
 from repositories import REPOSITORIES
-from github_client import GitHubGraphQLClient, fetch_with_cache
+from github_client import GitHubGraphQLClient, fetch_with_cache, load_cache
 
 CACHE_DIR = "cache/raw_contributor_data"
 
@@ -50,10 +50,18 @@ def get_contributors(client: GitHubGraphQLClient, contributor_type: str, reposit
         issue_extra_fields = """
                         closedAt"""
 
+    # Discussions sort by UPDATED_AT DESC by default. The incremental fetch
+    # resumes after the last cached cursor, so with that order it never sees a
+    # new discussion. Issues and pull requests already sort by creation, oldest
+    # first.
+    order_by = ""
+    if contributor_type == "discussions":
+        order_by = ", orderBy: {field: CREATED_AT, direction: ASC}"
+
     query = f"""
     query($cursor: String, $repository: String!) {{
         repository(owner:"autowarefoundation", name:$repository) {{
-            {contributor_type}(first:100, after: $cursor) {{
+            {contributor_type}(first:100, after: $cursor{order_by}) {{
                 totalCount
                 edges {{
                     cursor
@@ -95,6 +103,17 @@ def get_contributors(client: GitHubGraphQLClient, contributor_type: str, reposit
     return all_edges
 
 
+def is_created_ascending(edges: List[Dict]) -> bool:
+    """True when the cached edges are in creation order, oldest first.
+
+    A discussion cache written before the query requested CREATED_AT ASC is
+    in UPDATED_AT DESC order. Its last cursor belongs to that order, so the
+    incremental fetch must not resume from it.
+    """
+    dates = [e.get("node", {}).get("createdAt") or "" for e in edges if isinstance(e, dict)]
+    return all(a <= b for a, b in zip(dates, dates[1:]))
+
+
 def main():
     """Main function to generate JSON files for all repositories"""
     parser = argparse.ArgumentParser(
@@ -122,11 +141,15 @@ def main():
 
     # Special case for autoware discussions
     try:
+        discussions_use_cache = args.use_cache
+        if discussions_use_cache and not is_created_ascending(load_cache("autoware_discussions.json", CACHE_DIR)):
+            print("Discussion cache is not in creation order; fetching all discussions again.")
+            discussions_use_cache = False
         fetch_with_cache(
             "autoware_discussions.json",
             CACHE_DIR,
             lambda start_cursor=None: get_contributors(client, "discussions", "autoware", start_cursor=start_cursor),
-            use_cache=args.use_cache,
+            use_cache=discussions_use_cache,
         )
     except Exception as e:
         print(f"Error processing autoware discussions: {e}")

@@ -235,6 +235,17 @@ known-good data instead of silently vanishing from the output. Skipping the
 restore (the previous behavior) caused a real incident: 16 repositories and 843
 unique stars disappeared from the dashboard and could not be re-fetched.
 
+**A failure anywhere in the job discards the whole re-fetch**, because "Save
+cache" runs only when every step before it passes. From 2026-09-07 to
+2026-11-09, every Monday run failed: arXiv answered `429`, the full-mode
+`get_arxiv_mentions.py` started from an empty paper list and wrote no output,
+and the `cp` in "Publish results" failed. The cache then held only weekday
+data, which is new items with their state at the time of the first fetch. A
+comment on an older issue, or the merge of a PR that was open at that time,
+never reached the rankings. `get_arxiv_mentions.py` now loads its cache in
+both modes, and `merge_papers` falls back to it when the re-fetch does not
+complete. Keep every fetcher in this job able to fall back to its cache.
+
 ### Regression guard
 
 `check_regression.py` compares the freshly generated `results/` against the last
@@ -282,6 +293,14 @@ When using `--use-cache`, fetcher scripts:
 - Load existing cached data and extract the last cursor
 - Fetch only new data starting from that cursor (GraphQL `after:` is exclusive, so no duplication)
 - Merge new data with cached data and save
+
+This works only for a connection that sorts by creation, oldest first. Issues
+and pull requests do that by default. Discussions sort by `UPDATED_AT DESC` by
+default, so `get_contributors.py` requests `CREATED_AT ASC` for them. A
+discussion cache in the old order fails `is_created_ascending`, and the
+script then fetches all discussions again instead of resuming from its cursor.
+Items that already sit in the cache do not get updates until the next full
+re-fetch.
 
 ### Bot Exclusion
 
