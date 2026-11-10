@@ -219,11 +219,15 @@ unique stars disappeared from the dashboard and could not be re-fetched.
 `check_regression.py` compares the freshly generated `results/` against the last
 published snapshot (`cache/last_published/`, persisted via `actions/cache`) and
 **fails the job before anything is published or cached** when a metric goes
-backwards. Series counts (e.g. number of `*_stars_history` keys) are compared
-with zero tolerance because a repository disappearing is always a bug;
-cumulative totals allow a small decrease (default 2%) because users do unstar
-repositories. Dispatch with `allow_regression: true` to override when a drop is
-genuinely expected.
+backwards. Per-repository series (for example `<repo>_stars_history`) are
+compared by name with zero tolerance. Every baseline series must still exist,
+unless its repository left the tracked list in `public/repositories.json`. The
+top 25 by score can change on any day, so a swap at 25th place is not a
+regression. Do not compare series counts: a repository that enters the list
+can hide one that lost its data, and a repository with no issues has one
+activity series, not two. Cumulative totals allow a small decrease (default 2%)
+because users unstar repositories. Dispatch with `allow_regression: true` to
+override when a drop is expected.
 
 ## Important Implementation Details
 

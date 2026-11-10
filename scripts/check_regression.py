@@ -13,8 +13,12 @@ backwards, so the previous good cache and the live site are left intact.
 
 Two rules, reflecting how these metrics actually behave:
 
-- **Series counts must never shrink.** A repository disappearing from the
-  output is always a bug; the repository list does not shrink on its own.
+- **A tracked repository must never lose a series.** Every per-repository
+  series in the baseline must still exist, unless its repository left the
+  tracked list. ``fetch_repositories.py`` keeps the top 25 active repositories
+  by score, so two repositories near 25th place can swap on any day. That swap
+  is not a regression. A partial organization listing, which could shrink the
+  tracked list, is caught by the ``org_star_total`` check instead.
 - **Cumulative totals may dip slightly.** Users unstar repositories, so a small
   decrease is legitimate. Only drops beyond ``--tolerance`` are flagged.
 """
@@ -24,7 +28,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple
+from typing import Any, Dict, List, NamedTuple, Optional, Set
 
 
 class Violation(NamedTuple):
@@ -33,19 +37,88 @@ class Violation(NamedTuple):
     metric: str
     previous: float
     current: float
+    detail: str = ""
 
     def describe(self) -> str:
         delta = self.current - self.previous
         pct = (delta / self.previous * 100) if self.previous else 0.0
-        return (
+        line = (
             f"  {self.file}: {self.metric} {self.previous} -> {self.current} "
             f"({delta:+g}, {pct:+.1f}%)"
         )
+        return f"{line}\n    {self.detail}" if self.detail else line
 
 
-# Metrics whose value is a count of series/repositories: any decrease is a bug,
-# so they are compared with zero tolerance.
-COUNT_METRICS = {"repo_series", "current_count_repos"}
+# Metrics whose value is a count of repositories: any decrease is a bug, so they
+# are compared with zero tolerance.
+COUNT_METRICS = {"current_count_repos"}
+
+# Key suffixes of the per-repository series in each file. A key is
+# "<repository><suffix>". The "total_*" keys are aggregates, not repositories.
+REPO_SERIES_SUFFIXES = {
+    "stars_history.json": ("_stars_history",),
+    "commits_history.json": ("_commits_history",),
+    "activity_history.json": ("_merged_prs_history", "_resolved_issues_history"),
+}
+
+
+def _repo_of(key: str, suffixes) -> Optional[str]:
+    """Repository name of a per-repository series key, or None for other keys."""
+    if key.startswith("total_"):
+        return None
+    for suffix in suffixes:
+        if key.endswith(suffix):
+            return key[: -len(suffix)]
+    return None
+
+
+def series_keys(filename: str, data: Any) -> Dict[str, str]:
+    """Per-repository series in *data*, as {series key: repository name}."""
+    suffixes = REPO_SERIES_SUFFIXES.get(filename)
+    if not suffixes or not isinstance(data, dict):
+        return {}
+    keys = {}
+    for key in data:
+        repo = _repo_of(key, suffixes)
+        if repo is not None:
+            keys[key] = repo
+    return keys
+
+
+def missing_series(filename: str, previous: Any, current: Any,
+                   tracked: Optional[Set[str]] = None) -> Optional[Violation]:
+    """Flag baseline series that vanished while their repository is still tracked.
+
+    Compares series names, not counts, so a new repository that gains a series
+    cannot hide another one that lost its series. When *tracked* is None every
+    baseline series must survive.
+    """
+    expected = {
+        key for key, repo in series_keys(filename, previous).items()
+        if tracked is None or repo in tracked
+    }
+    missing = expected - set(series_keys(filename, current))
+    if not missing:
+        return None
+    return Violation(
+        filename, "repo_series", len(expected), len(expected) - len(missing),
+        detail="missing: " + ", ".join(sorted(missing)),
+    )
+
+
+def load_tracked(path: Path) -> Optional[Set[str]]:
+    """Repositories that this run tracks, from repositories.json.
+
+    Returns None when the file is absent or malformed. The guard then treats
+    every baseline series as required, which is the strict side to fail on.
+    """
+    data = _load(Path(path))
+    repos = data.get("repositories") if isinstance(data, dict) else None
+    if not isinstance(repos, list) or not repos:
+        print(f"Regression guard: no tracked repository list at {path}; "
+              "every baseline series is required.")
+        return None
+    return set(repos)
 
 
 def _last(series: Any, field: str) -> float:
@@ -61,17 +134,13 @@ def metrics_for(filename: str, data: Any) -> Dict[str, float]:
 
     Files not listed here (google_trends, rankings) are intentionally skipped:
     their values are relative or re-derived every run, so a decrease carries no
-    signal.
+    signal. Per-repository series are checked by name in ``missing_series``.
     """
     if not isinstance(data, dict):
         return {}
 
     if filename == "stars_history.json":
         metrics = {
-            "repo_series": sum(
-                1 for k in data
-                if k.endswith("_stars_history") and k != "total_stars_history"
-            ),
             "total_stars": _last(data.get("total_stars_history"), "star_count"),
         }
         if isinstance(data.get("current_star_counts"), dict):
@@ -83,10 +152,6 @@ def metrics_for(filename: str, data: Any) -> Dict[str, float]:
         if isinstance(data.get("org_star_total"), int):
             metrics["org_star_total"] = data["org_star_total"]
         return metrics
-    if filename == "commits_history.json":
-        return {"repo_series": sum(1 for k in data if k.endswith("_commits_history"))}
-    if filename == "activity_history.json":
-        return {"repo_series": sum(1 for k in data if k.endswith("_history"))}
     if filename == "contributors_history.json":
         return {
             k: _last(v, "contributors_count")
@@ -109,11 +174,14 @@ def _load(path: Path) -> Any:
         return None
 
 
-def compare(results_dir: Path, baseline_dir: Path, tolerance: float = 0.02) -> List[Violation]:
+def compare(results_dir: Path, baseline_dir: Path, tolerance: float = 0.02,
+            tracked: Optional[Set[str]] = None) -> List[Violation]:
     """Return every metric that regressed from *baseline_dir* to *results_dir*.
 
     An absent or empty baseline yields no violations: the first run has nothing
-    to compare against and must be allowed through.
+    to compare against and must be allowed through. *tracked* is the current
+    repository list. A baseline series of a repository outside it is not
+    required. None requires every baseline series.
     """
     results_dir, baseline_dir = Path(results_dir), Path(baseline_dir)
     if not baseline_dir.is_dir():
@@ -133,6 +201,10 @@ def compare(results_dir: Path, baseline_dir: Path, tolerance: float = 0.02) -> L
             allowed = 0.0 if metric in COUNT_METRICS else prev_value * tolerance
             if curr_value < prev_value - allowed:
                 violations.append(Violation(name, metric, prev_value, curr_value))
+
+        lost = missing_series(name, previous, current, tracked)
+        if lost:
+            violations.append(lost)
     return violations
 
 
@@ -156,13 +228,16 @@ def main() -> None:
                         help="snapshot results into the baseline instead of comparing")
     parser.add_argument("--allow-regression", action="store_true",
                         help="report regressions but exit 0 (manual override)")
+    parser.add_argument("--repositories", default="public/repositories.json",
+                        help="tracked repository list written by fetch_repositories.py")
     args = parser.parse_args()
 
     if args.update:
         update_baseline(Path(args.results), Path(args.baseline))
         return
 
-    violations = compare(Path(args.results), Path(args.baseline), args.tolerance)
+    violations = compare(Path(args.results), Path(args.baseline), args.tolerance,
+                         tracked=load_tracked(Path(args.repositories)))
     if not violations:
         print("Regression guard: no metric went backwards.")
         return
