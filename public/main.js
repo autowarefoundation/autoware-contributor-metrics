@@ -85,6 +85,11 @@ const RANKING_CATEGORIES = [
   { key: 'review',    elementId: 'review-ranking-table',    color: '#4ECDC4', valueKey: 'count', valueName: 'Count' },
 ];
 
+// The pipeline tracks every active repository, which is far more than one chart
+// can show as separate lines. The star chart draws the repositories with the
+// most stars, and the palette above has one color for each of them.
+const STAR_CHART_MAX_REPOS = 25;
+
 let REPOSITORIES = [];
 let rankingsData = null;
 let currentPeriodType = 'monthly';
@@ -95,7 +100,9 @@ const rankingCharts = {};
 // =============================================================================
 
 function getLastEntry(array) {
-  return array.length > 0 ? array[array.length - 1] : null;
+  // A tracked repository can have no series at all, for example when
+  // repositories.json is newer than the star data. Treat that as "no entry".
+  return Array.isArray(array) && array.length > 0 ? array[array.length - 1] : null;
 }
 
 function formatDate(dateString) {
@@ -322,6 +329,7 @@ function renderStarsChart(json) {
     // still appear in the Top Repositories ranking, but there is no series to
     // draw for them here.
     .filter(({ repo }) => Array.isArray(json[`${repo}_stars_history`]))
+    .slice(0, STAR_CHART_MAX_REPOS)
     .forEach(({ repo }, index) => {
       const isFrozen = Boolean(frozen[repo]);
       series.push({
