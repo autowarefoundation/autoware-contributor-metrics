@@ -74,6 +74,24 @@ class RankingCalculator:
                 continue
             self._record_contribution(author, comment_node.get("createdAt"), target)
 
+    def _has_peer_review(self, node: Dict, pr_author: str) -> bool:
+        """True when a person other than the PR author, and not a bot, reviewed the PR.
+
+        Best Committer counts only these PRs. The rule follows the maintainers'
+        position that code which went through PR review is what matters:
+        https://github.com/autowarefoundation/autoware-contributor-metrics/issues/7#issuecomment-4033621189
+        Any submitted review counts, whatever its state, because the fetch query
+        does not request the state. PR comments do not count.
+        """
+        for review_edge in node.get("reviews", {}).get("edges", []):
+            review_node = review_edge.get("node")
+            if not review_node or not review_node.get("author"):
+                continue
+            reviewer = review_node["author"].get("login")
+            if reviewer and reviewer != pr_author and not self._is_bot(reviewer):
+                return True
+        return False
+
     def process_prs_and_reviews(self, file_path: str) -> None:
         """Process PR file for both code contributions and review contributions in one pass."""
         for edge in self._load_edges(file_path):
@@ -86,9 +104,9 @@ class RankingCalculator:
 
             pr_author = node["author"].get("login")
 
-            # Code contributions: count merged PRs
+            # Code contributions: count merged PRs that another person reviewed
             merged_at = node.get("mergedAt")
-            if merged_at:
+            if merged_at and self._has_peer_review(node, pr_author):
                 self._record_contribution(pr_author, merged_at, self.code_contributions)
 
             # Review contributions: PR comments (excluding self)

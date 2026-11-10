@@ -42,7 +42,7 @@ Monthly and yearly rankings for four categories:
 | Category | Metric | Description |
 |----------|--------|-------------|
 | **MVP** | Combined Rank | Sum of ranks across all three categories (lower is better) |
-| **Best Committer** | Merged PR count | Number of Pull Requests merged |
+| **Best Committer** | Peer-reviewed merged PR count | Number of merged Pull Requests that another person reviewed |
 | **Best Evangelist** | Posts + Comments | Issue/Discussion posts created + comments made |
 | **Best Reviewer** | Reviews + Comments | PR reviews + PR comments (excluding self-reviews) |
 
@@ -52,6 +52,8 @@ Monthly and yearly rankings for four categories:
 - Ties are broken by total contribution count across all categories
 
 **Note**: Bot accounts (dependabot, github-actions, codecov, etc.) are excluded from rankings.
+
+**Peer review rule:** Best Committer counts a merged PR only if a person other than the author left a review. A self-review, a bot review, or a PR comment does not count. The rule follows the maintainers' position that code which went through PR review is what matters ([issue #7 comment](https://github.com/autowarefoundation/autoware-contributor-metrics/issues/7#issuecomment-4033621189)).
 
 ## How to run locally
 
