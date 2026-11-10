@@ -50,6 +50,18 @@ def get_contributors(client: GitHubGraphQLClient, contributor_type: str, reposit
         issue_extra_fields = """
                         closedAt"""
 
+    # Add reactions for issues and discussions. A reaction from another person
+    # makes the thread count for Best Evangelist (see calculate_rankings.py).
+    if contributor_type in ("issues", "discussions"):
+        issue_extra_fields += """
+                        reactions(first:100) {
+                            nodes {
+                                user {
+                                    login
+                                }
+                            }
+                        }"""
+
     # Discussions sort by UPDATED_AT DESC by default. The incremental fetch
     # resumes after the last cached cursor, so with that order it never sees a
     # new discussion. Issues and pull requests already sort by creation, oldest
