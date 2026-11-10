@@ -31,10 +31,10 @@ Tracks the cumulative number of unique contributors over time.
 
 **Target Repositories:**
 - Dynamically fetched from autowarefoundation organization via GitHub API
-- Top 25 by composite score (stars + forks)
+- Every public repository that is not archived, not a fork, and received a push within 2 years, plus `alpamayo-autoware` (a fork the foundation develops on), minus `autoware_dummy_repository` (a test repository)
 - Legacy autoware_ai repositories included for historical tracking
 
-**Note:** Archived repositories and repositories not updated within 2 years are excluded, except for legacy autoware_ai repositories.
+**Note:** The star chart shows the 25 repositories with the most stars. All other metrics use every tracked repository.
 
 ### Contributor Rankings
 Monthly and yearly rankings for four categories:

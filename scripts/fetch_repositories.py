@@ -4,10 +4,16 @@ Fetch and filter repositories from Autoware Foundation based on defined rules.
 
 Rules:
 - Fetch all repositories from autowarefoundation organization
-- Exclude archived repositories
-- Exclude repositories not updated within 2 years (except autoware_ai legacy repos)
-- Select top 25 by composite score (stars + forks)
+- Exclude private repositories (the dashboard is public)
+- Exclude archived repositories and forks (except INCLUDED_FORKS)
+- Exclude EXCLUDED_REPOSITORIES by name
+- Exclude repositories not pushed to within 2 years (except autoware_ai legacy repos)
+- Track every remaining repository, ordered by composite score (stars + forks)
 - Include all autoware_ai legacy repositories for historical tracking
+
+An earlier version kept only the top 25 by score. That cap left out repositories
+with heavy activity but few stars, and two repositories near 25th place could
+swap on any day.
 """
 
 import sys
@@ -17,6 +23,17 @@ from typing import List, Dict
 
 from github_client import GitHubGraphQLClient
 from utils import parse_github_datetime, write_json_output
+
+# Forks that the foundation develops on, so their activity is foundation work.
+# alpamayo-autoware is a fork of NVlabs/alpamayo.
+INCLUDED_FORKS = {"alpamayo-autoware"}
+
+# Repositories whose activity is not real project work.
+EXCLUDED_REPOSITORIES = {
+    # "A dummy repository for testing release process". Its test PRs would
+    # count as merged PRs.
+    "autoware_dummy_repository",
+}
 
 
 def fetch_all_repositories(client: GitHubGraphQLClient) -> List[Dict]:
@@ -38,6 +55,7 @@ def fetch_all_repositories(client: GitHubGraphQLClient) -> List[Dict]:
                 nodes {
                     name
                     isArchived
+                    isFork
                     isPrivate
                     stargazerCount
                     forkCount
@@ -92,7 +110,7 @@ def filter_and_rank_repositories(repos: List[Dict], cutoff_years: int = 2) -> Di
     Filter and rank repositories according to rules.
 
     Returns a dict with:
-    - active: Top 25 active repositories by score
+    - active: All active repositories, sorted by score
     - legacy: All autoware_ai repositories
     - all: Combined list (active + legacy, deduplicated)
     """
@@ -102,7 +120,14 @@ def filter_and_rank_repositories(repos: List[Dict], cutoff_years: int = 2) -> Di
     legacy_repos = []
 
     for repo in repos:
+        # The dashboard is public. A token that can see private repositories
+        # must not publish their activity.
+        if repo.get("isPrivate"):
+            continue
+
         name = repo["name"]
+        if name in EXCLUDED_REPOSITORIES:
+            continue
         is_archived = repo["isArchived"]
         stars = repo["stargazerCount"]
         forks = repo["forkCount"]
@@ -126,8 +151,8 @@ def filter_and_rank_repositories(repos: List[Dict], cutoff_years: int = 2) -> Di
             legacy_repos.append(repo_info)
             continue
 
-        # Skip archived repositories
-        if is_archived:
+        # Skip archived repositories and forks
+        if is_archived or (repo.get("isFork") and name not in INCLUDED_FORKS):
             continue
 
         # Skip repositories not updated within cutoff period
@@ -136,28 +161,25 @@ def filter_and_rank_repositories(repos: List[Dict], cutoff_years: int = 2) -> Di
 
         active_repos.append(repo_info)
 
-    # Sort active repos by score and take top 25
-    active_repos.sort(key=lambda x: -x["score"])
-    top_active = active_repos[:25]
-
-    # Sort legacy repos by score
-    legacy_repos.sort(key=lambda x: -x["score"])
+    # Sort by score, then name, so the order is stable between runs
+    active_repos.sort(key=lambda x: (-x["score"], x["name"]))
+    legacy_repos.sort(key=lambda x: (-x["score"], x["name"]))
 
     # Combine lists (active repos first, then legacy)
-    all_repos = [r["name"] for r in top_active]
+    all_repos = [r["name"] for r in active_repos]
     for r in legacy_repos:
         if r["name"] not in all_repos:
             all_repos.append(r["name"])
 
     return {
-        "active": top_active,
+        "active": active_repos,
         "legacy": legacy_repos,
         "repositories": all_repos,
         "metadata": {
             "generated_at": datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ'),
             "cutoff_years": cutoff_years,
             "total_fetched": len(repos),
-            "active_count": len(top_active),
+            "active_count": len(active_repos),
             "legacy_count": len(legacy_repos),
             **summarize_org_stars(repos),
         }
@@ -203,7 +225,7 @@ def main():
     write_json_output(result, args.output)
 
     print(f"\nDone! Generated {args.output}")
-    print(f"Active repositories (Top {len(result['active'])} by score):")
+    print(f"Active repositories ({len(result['active'])}, by score):")
     for repo in result['active'][:10]:
         print(f"  - {repo['name']}: score={repo['score']} ({repo['stars']} stars + {repo['forks']} forks)")
     if len(result['active']) > 10:
