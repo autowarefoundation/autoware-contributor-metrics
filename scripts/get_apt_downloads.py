@@ -71,6 +71,34 @@ def fetch_awstats_page(year, month):
         return None
 
 
+def load_month_html(year, month, use_cache, is_current):
+    """Return the AWStats page for one month, or None if there is none.
+
+    With use_cache, a past month comes from the cache without a request. The
+    current month is always fetched, because its counts still grow. If a fetch
+    fails, the cached page is used instead. Without that fallback, one failed
+    request drops the whole month from the cumulative total, and the
+    regression guard blocks the publish.
+    """
+    month_key = f"{year}-{month:02d}"
+    cache_path = get_cache_path(year, month)
+
+    if use_cache and not is_current and cache_path.exists():
+        print(f"Using cached data for {month_key}")
+        return cache_path.read_text()
+
+    html_text = fetch_awstats_page(year, month)
+    time.sleep(1)
+    if html_text is not None:
+        cache_path.write_text(html_text)
+        return html_text
+
+    if cache_path.exists():
+        print(f"  Fetch failed, using cached data for {month_key}")
+        return cache_path.read_text()
+    return None
+
+
 def extract_downloads(html_text):
     """Extract autoware package download counts from AWStats HTML.
 
@@ -129,20 +157,9 @@ def main():
 
     for year, month in months:
         month_key = f"{year}-{month:02d}"
-        cache_path = get_cache_path(year, month)
         is_current = (year, month) == current_month
 
-        html_text = None
-
-        if args.use_cache and not is_current and cache_path.exists():
-            print(f"Using cached data for {month_key}")
-            html_text = cache_path.read_text()
-        else:
-            html_text = fetch_awstats_page(year, month)
-            if html_text is not None:
-                cache_path.write_text(html_text)
-            time.sleep(1)
-
+        html_text = load_month_html(year, month, args.use_cache, is_current)
         if html_text is None:
             continue
 
