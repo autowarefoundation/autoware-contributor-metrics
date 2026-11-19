@@ -169,6 +169,15 @@ calculate step):
   Without it, self-merged PRs count too: `autoware_carla_scenario` alone has
   about 1,000 of them from one account. Any review state counts, because
   the fetch query does not request the state. PR comments do not count.
+- Best Evangelist uses the same idea, because the category measures dialogue.
+  An issue or discussion counts only when a person other than the author, and
+  not a bot, commented on it or reacted to the post (`_has_peer_interaction`).
+  Then the post and every comment in the thread count, the author's replies
+  included. The person who reacts gets no points. Reactions on comments do
+  not count. Only issues and discussions fetch `reactions`, and threads
+  cached before that field existed get it at the next full re-fetch. Without the rule,
+  issues that only their author touched count too: `autoware_carla_scenario`
+  has about 940 of them from one account in October and November 2026.
 - MVP requires appearing in all three categories; ranked by sum of ranks
 - Excludes bot accounts (dependabot, github-actions, etc.)
 

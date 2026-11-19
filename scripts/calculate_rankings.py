@@ -123,18 +123,56 @@ class RankingCalculator:
                         continue
                     self._record_contribution(author, review_node.get("createdAt"), self.review_contributions)
 
+    def _is_peer(self, login: str, thread_author: str) -> bool:
+        return bool(login) and login != thread_author and not self._is_bot(login)
+
+    def _has_peer_interaction(self, node: Dict, thread_author: str) -> bool:
+        """True when a person other than the thread author, and not a bot,
+        commented on the thread or reacted to the post.
+
+        Best Evangelist counts only these issues and discussions, because the
+        category measures dialogue with other people. It is the same idea as
+        `_has_peer_review` for Best Committer. Without it, an issue that only
+        its author ever touched counts too: `autoware_carla_scenario` has about
+        940 of them from one account in two months.
+
+        A reaction qualifies the thread, but the person who reacts gets no
+        points. Only reactions on the post itself count, not on its comments.
+        Threads cached before the fetch query requested reactions have no
+        `reactions` key. They get it at the next full re-fetch.
+        """
+        for comment_edge in (node.get("comments") or {}).get("edges", []):
+            comment_node = comment_edge.get("node")
+            if not comment_node or not comment_node.get("author"):
+                continue
+            if self._is_peer(comment_node["author"].get("login"), thread_author):
+                return True
+        for reaction_node in (node.get("reactions") or {}).get("nodes", []):
+            if not reaction_node or not reaction_node.get("user"):
+                continue
+            if self._is_peer(reaction_node["user"].get("login"), thread_author):
+                return True
+        return False
+
     def process_issues_discussions(self, file_path: str) -> None:
-        """Process issue/discussion file for community contributions (post + comment count)"""
+        """Process issue/discussion file for community contributions (post + comment count).
+
+        A thread counts only when another person commented on it or reacted to
+        the post. Then the post and every comment in it count, the author's
+        replies included.
+        """
         for edge in self._load_edges(file_path):
             if not isinstance(edge, dict) or "node" not in edge:
                 continue
 
             node = edge["node"]
+            thread_author = (node.get("author") or {}).get("login")
+            if not self._has_peer_interaction(node, thread_author):
+                continue
 
             # Count Issue/Discussion author (post creator)
-            if node.get("author"):
-                author = node["author"].get("login")
-                self._record_contribution(author, node.get("createdAt"), self.community_contributions)
+            if thread_author:
+                self._record_contribution(thread_author, node.get("createdAt"), self.community_contributions)
 
             # Count comments
             self._process_comments(node, self.community_contributions)

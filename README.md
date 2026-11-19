@@ -43,7 +43,7 @@ Monthly and yearly rankings for four categories:
 |----------|--------|-------------|
 | **MVP** | Combined Rank | Sum of ranks across all three categories (lower is better) |
 | **Best Committer** | Peer-reviewed merged PR count | Number of merged Pull Requests that another person reviewed |
-| **Best Evangelist** | Posts + Comments | Issue/Discussion posts created + comments made |
+| **Best Evangelist** | Posts + Comments | Issue/Discussion posts created + comments made, only in threads where another person commented or reacted to the post |
 | **Best Reviewer** | Reviews + Comments | PR reviews + PR comments (excluding self-reviews) |
 
 **MVP Calculation:**
